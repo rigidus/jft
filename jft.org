@@ -1,0 +1,15 @@
+#+STARTUP: showall indent hidestars
+
+JFT programming language
+
+* Intro
+
+...skipped..
+
+* Targets
+
+x86 (32-bits), x86_64 (64b-bits), ...
+
+* MFM - Minimal Forth Machine
+
+[[file:mfm.org][mfm]]
