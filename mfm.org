@@ -17,66 +17,63 @@ x86 (32-bits), x86_64 (64b-bits), ...
 
 ** NEXT
 
-#+NAME: m_next
-#+BEGIN_SRC elisp :var arg="=!=" :results value
-  (setq arg (replace-regexp-in-string "reg_acc" (format "%s" *reg_acc*) arg))
-  (setq arg (replace-regexp-in-string "_sfx" (format "%s" *_sfx*) arg))
-  arg
-#+END_SRC
-
 #+NAME: next_x86_or_x86_64
 #+BEGIN_EXAMPLE asm
   .macro NEXT
-      lods_sfx
-      jmp *(%reg_acc)
+      lods
+      jmp *(%ACR)
   .endm
 #+END_EXAMPLE
 
 ** push and pop RSP
 
-#+NAME: m_push_and_pop_rsp
-#+BEGIN_SRC elisp :var arg="=!=" :results value
-  (setq arg (replace-regexp-in-string "reg_rsp" (format "%s" *reg_rsp*) arg))
-  (setq arg (replace-regexp-in-string "wz" (format "%s" *wz*) arg))
-  arg
-#+END_SRC
-
-
 #+NAME: pushrsp_and_poprsp_x86_or_x86_64
 #+BEGIN_EXAMPLE asm
   .macro PUSHRSP reg
-      lea     -wz(%reg_rsp), %reg_rsp  # декремент %reg_rsp на wz
-      movl    \reg, (%reg_rsp)    # push reg в стек возвратов
+      lea     -_wz_(%RSR), %RSR   # декремент %RSR на _wz_
+      mov     \reg, (%RSR)        # push reg в стек возвратов
   .endm
 
   .macro POPRSP reg
-      mov     (%reg_rsp), \reg    # pop вершину стека возвратов в reg
-      lea     wz(%reg_rsp), %reg_rsp   # инкремент %reg_rsp на wz
+      mov     (%RSR), \reg        # pop с вершины стека возвратов в reg
+      lea     _wz_(%RSR), %RSR    # инкремент %RSR на _wz_
   .endm
 #+END_EXAMPLE
 
+* Docol
+
+#+NAME: docol_x86_or_x86_64
+#+BEGIN_EXAMPLE asm
+      .text
+      .align _wz_
+  DOCOL:
+      PUSHRSP %IPR                # сохранить %IPR в стеке возвратов
+      lea     _wz_(%ACR), %IPR    # %IPR теперь указывает на param-field
+      NEXT                        # делаем NEXT
+#+END_EXAMPLE
 
 * Tangle
 
-#+NAME: settings
-#+BEGIN_SRC elisp :noweb no :results value
-  (setq *arch* "x86_64")    ;; | x86
-  (setq *wz* "8")           ;; | 4
-  (setq *_sfx*     "q")     ;; | l | d    - Suffix of operand
-  (setq *reg_acc*  "rax")   ;; | eax | ax - Accumulator Register
-  (setq *reg_ip*   "rsi")   ;; | esi | si - Insturction Pointer Register
-  (setq *reg_rsp*  "rbp")   ;; | ebp | si - Insturction Pointer Register
-  ""                        ;; retval
-#+END_SRC
+#+NAME: wrp
+#+BEGIN_SRC elisp :var arg="=!="
+  (defun rep (place var)
+    (setf arg (replace-regexp-in-string place (format "%s" var) arg t t)))
 
+  (rep "_wz_" "0x08") ;; |   4 | 2
+  (rep "!" "q");; |   l | d    - Suffix of operand
+  (rep "%ACR" "%rax")  ;; | eax | ax - Accumulator Register
+  (rep "%IPR" "%rsi")   ;; | esi | si - Insturction Pointer Register
+  (rep "%RSR" "%rbp") ;; | ebp | bp - Return Stack Register
+  arg
+#+END_SRC
 
 #+NAME: macroses
 #+BEGIN_SRC asm :noweb yes
-  <<settings()>>
   <<m_wz()>>
 
-  <<m_next(next_x86_or_x86_64)>>
-  <<m_push_and_pop_rsp(pushrsp_and_poprsp_x86_or_x86_64)>>
+  <<wrp(next_x86_or_x86_64)>>
+  <<wrp(pushrsp_and_poprsp_x86_or_x86_64)>>
+  <<wrp(docol_x86_or_x86_64)>>
 #+END_SRC
 
 
