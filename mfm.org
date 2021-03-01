@@ -1,0 +1,90 @@
+#+STARTUP: showall indent hidestars
+
+MFM - Minimal Forth Machine
+
+* Targets
+
+x86 (32-bits), x86_64 (64b-bits), ...
+
+* Macroses
+
+** WZ - Word Size
+
+#+NAME: m_wz
+#+BEGIN_SRC elisp :result output
+  (format ".set WZ, %s" *wz*)
+#+END_SRC
+
+** NEXT
+
+#+NAME: m_next
+#+BEGIN_SRC elisp :var arg="=!=" :results value
+  (setq arg (replace-regexp-in-string "reg_acc" (format "%s" *reg_acc*) arg))
+  (setq arg (replace-regexp-in-string "_sfx" (format "%s" *_sfx*) arg))
+  arg
+#+END_SRC
+
+#+NAME: next_x86_or_x86_64
+#+BEGIN_EXAMPLE asm
+  .macro NEXT
+      lods_sfx
+      jmp *(%reg_acc)
+  .endm
+#+END_EXAMPLE
+
+** push and pop RSP
+
+#+NAME: m_push_and_pop_rsp
+#+BEGIN_SRC elisp :var arg="=!=" :results value
+  (setq arg (replace-regexp-in-string "reg_rsp" (format "%s" *reg_rsp*) arg))
+  (setq arg (replace-regexp-in-string "wz" (format "%s" *wz*) arg))
+  arg
+#+END_SRC
+
+
+#+NAME: pushrsp_and_poprsp_x86_or_x86_64
+#+BEGIN_EXAMPLE asm
+  .macro PUSHRSP reg
+      lea     -wz(%reg_rsp), %reg_rsp  # декремент %reg_rsp на wz
+      movl    \reg, (%reg_rsp)    # push reg в стек возвратов
+  .endm
+
+  .macro POPRSP reg
+      mov     (%reg_rsp), \reg    # pop вершину стека возвратов в reg
+      lea     wz(%reg_rsp), %reg_rsp   # инкремент %reg_rsp на wz
+  .endm
+#+END_EXAMPLE
+
+
+* Tangle
+
+#+NAME: settings
+#+BEGIN_SRC elisp :noweb no :results value
+  (setq *arch* "x86_64")    ;; | x86
+  (setq *wz* "8")           ;; | 4
+  (setq *_sfx*     "q")     ;; | l | d    - Suffix of operand
+  (setq *reg_acc*  "rax")   ;; | eax | ax - Accumulator Register
+  (setq *reg_ip*   "rsi")   ;; | esi | si - Insturction Pointer Register
+  (setq *reg_rsp*  "rbp")   ;; | ebp | si - Insturction Pointer Register
+  ""                        ;; retval
+#+END_SRC
+
+
+#+NAME: macroses
+#+BEGIN_SRC asm :noweb yes
+  <<settings()>>
+  <<m_wz()>>
+
+  <<m_next(next_x86_or_x86_64)>>
+  <<m_push_and_pop_rsp(pushrsp_and_poprsp_x86_or_x86_64)>>
+#+END_SRC
+
+
+#+NAME: all
+#+BEGIN_SRC asm :tangle src/all.S :noweb tangle :exports code :padline no :comments none
+  <<macroses>>
+
+      .globl  _start
+      .type   _start, @function
+  _start:
+#+END_SRC
