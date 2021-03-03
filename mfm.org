@@ -11,38 +11,106 @@ x86 (32-bits), x86_64 (64b-bits), ...
 ** WZ - Word Size
 
 #+NAME: m_wz
-#+BEGIN_SRC elisp :result output
-  (format ".set WZ, %s" *wz*)
-#+END_SRC
+#+BEGIN_EXAMPLE asm
+  .set WZ, _wz_
+#+END_EXAMPLE
 
 ** NEXT
 
-#+NAME: next_x86_or_x86_64
+[TODO:gmm] - optimization for 32, 16, 8
+
+#+NAME: next
+#+BEGIN_SRC elisp :var arg=sub_next :results value
+  (defun next-opt-64 (in)
+    (replace-regexp-in-string
+     "mov\s+\(\s*%rsi\s*\)\s*\,\s*%rax\s*\n\s*add\s+0x08\s*\,\s*%rsi"
+     "lodsq" in t t))
+
+  (print arg)
+  (next-opt-64 (wrp arg))
+#+END_SRC
+
+#+NAME: sub_next
 #+BEGIN_EXAMPLE asm
-  .macro NEXT
-      lods
-      jmp *(%ACR)
-  .endm
+  # NEXT
+      mov     (%IPR), %ACR
+      add     _wz_, %IPR
+      jmp     *(%ACR)
 #+END_EXAMPLE
 
 ** push and pop RSP
 
-#+NAME: pushrsp_and_poprsp_x86_or_x86_64
+[TODO:gmm] - params for macro
+
+#+NAME: pushrsp
+#+BEGIN_SRC elisp :var arg=sub_pushrsp :results value
+  (wrp arg)
+#+END_SRC
+
+#+NAME: poprsp
+#+BEGIN_SRC elisp :var arg=sub_poprsp :results value
+  (wrp arg)
+#+END_SRC
+
+#+NAME: sub_pushrsp
 #+BEGIN_EXAMPLE asm
   .macro PUSHRSP reg
       lea     -_wz_(%RSR), %RSR   # декремент %RSR на _wz_
       mov     \reg, (%RSR)        # push reg в стек возвратов
   .endm
+#+END_EXAMPLE
 
+#+NAME: sub_poprsp
+#+BEGIN_EXAMPLE asm
   .macro POPRSP reg
       mov     (%RSR), \reg        # pop с вершины стека возвратов в reg
       lea     _wz_(%RSR), %RSR    # инкремент %RSR на _wz_
   .endm
 #+END_EXAMPLE
 
+** defcode
+
+#+NAME: defcode
+#+BEGIN_EXAMPLE asm
+  .macro defcode name, namelen, flags=0, label
+      .section .rodata
+      .align 4
+      .globl name_\label
+  name_\label :
+      .int    link               # link
+      .set    link,name_\label
+      .byte   \flags+\namelen    # flags + байт длины
+      .ascii  "\name"            # имя
+      .align  4                  # выравнивание на 4-х байтовую границу
+      .globl  \label
+  \label :
+      .int    code_\label        # codeword
+      .text
+      //.align 4
+      .globl  code_\label
+  code_\label :
+      # далее следует ассемблерный код
+  .endm
+#+END_EXAMPLE
+
+** defvar
+
+#+NAME: defvar
+#+BEGIN_EXAMPLE asm
+  .macro defvar name, namelen, flags=0, label, initial=0
+      defcode \name,\namelen,\flags,\label
+      push    $var_\name
+      NEXT
+      .data
+      .align 4
+      var_\name :
+      .int \initial
+  .endm
+#+END_EXAMPLE
+
 * Docol
 
-#+NAME: docol_x86_or_x86_64
+#+NAME: docol
 #+BEGIN_EXAMPLE asm
       .text
       .align _wz_
@@ -52,36 +120,89 @@ x86 (32-bits), x86_64 (64b-bits), ...
       NEXT                        # делаем NEXT
 #+END_EXAMPLE
 
+* Build-in vars
+
+#+NAME: built_in_vars
+#+BEGIN_EXAMPLE asm
+  defvar "STATE",5,,STATE
+  defvar "HERE",4,,HERE
+  defvar "LATEST",6,,LATEST,name_SYSCALL0  # SYSCALL0 должен быть последним встроенным словом
+  defvar "S0",2,,SZ
+  defvar "BASE",4,,BASE,10
+#+END_EXAMPLE
+
+* Settings
+
+#+NAME: settings
+#+BEGIN_SRC elisp :results output
+  (setq *_wz_*  "0x08")  ;; |   4 | 2
+  (setq *!*     "q")     ;; |   l | d  - Suffix of operand
+  (setq *%ACR*  "%rax")  ;; | eax | ax - Accumulator Register
+  (setq *%IPR*  "%rsi")  ;; | esi | si - Insturction Pointer Register
+  (setq *%RSR*  "%rbp")  ;; | ebp | bp - Return Stack Register
+#+END_SRC
+
 * Tangle
 
-#+NAME: wrp
-#+BEGIN_SRC elisp :var arg="=!="
-  (defun rep (place var)
-    (setf arg (replace-regexp-in-string place (format "%s" var) arg t t)))
-
-  (rep "_wz_" "0x08") ;; |   4 | 2
-  (rep "!" "q");; |   l | d    - Suffix of operand
-  (rep "%ACR" "%rax")  ;; | eax | ax - Accumulator Register
-  (rep "%IPR" "%rsi")   ;; | esi | si - Insturction Pointer Register
-  (rep "%RSR" "%rbp") ;; | ebp | bp - Return Stack Register
-  arg
+#+NAME: mfm
+#+BEGIN_SRC asm :tangle src/mfm.S :noweb yes :results output
+  <<settings()>>
+  <<base()>>
+  <<start()>>
 #+END_SRC
 
-#+NAME: macroses
-#+BEGIN_SRC asm :noweb yes
-  <<m_wz()>>
+#+NAME: base
+#+BEGIN_SRC elisp :results output
+  (defun rep (str replace regexp)
+    (replace-regexp-in-string regexp replace str t t))
 
-  <<wrp(next_x86_or_x86_64)>>
-  <<wrp(pushrsp_and_poprsp_x86_or_x86_64)>>
-  <<wrp(docol_x86_or_x86_64)>>
+  (defun wrp (arg)
+    (let ((arg arg))
+      (setq arg (rep arg *_wz_* "_wz_"))
+      (setq arg (rep arg *!*    "!"   ))
+      (setq arg (rep arg *%ACR* "%ACR"))
+      (setq arg (rep arg *%IPR* "%IPR"))
+      (setq arg (rep arg *%RSR* "%RSR"))))
+
+  (defun macroexpand (arg)
+    (let ((next (org-sbe next)))
+      (rep arg next "\\[NEXT\\]")
+      ))
 #+END_SRC
 
+#+NAME: start
+#+BEGIN_SRC elisp :var arg=sub_start
+  (print (macroexpand arg))
+#+END_SRC
 
-#+NAME: all
-#+BEGIN_SRC asm :tangle src/all.S :noweb tangle :exports code :padline no :comments none
-  <<macroses>>
+[TODO:gmm] - Количество параметров командной строки
+[TODO:gmm] - Указатель на параметры командной строки
 
+[TODO:gmm] - псевдорегистры
+
+
+#+NAME: sub_start
+#+BEGIN_EXAMPLE asm :noweb yes
+  # START
+      .text
       .globl  _start
       .type   _start, @function
   _start:
-#+END_SRC
+      # Сбрасываем флаг направления
+      cld
+      # Записываем вершину стека параметров %esp в переменную S0
+      mov     %esp, (var_S0)
+      # Устанавливаем стек возвратов %ebp
+      mov     $return_stack_top, %ebp
+      # Устанавливаем указатель HERE на начало области данных.
+      mov     $data_buffer, %eax
+      mov     %eax, (var_HERE)
+      # Инициализируем IP
+      mov     $cold_start, %esi
+      # Запускаем интерпретатор
+      [NEXT]
+
+      .section .rodata
+  cold_start:                             # High-level code without a codeword.
+      .int QUIT
+#+END_EXAMPLE
