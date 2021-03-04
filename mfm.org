@@ -1,4 +1,14 @@
 #+STARTUP: showall indent hidestars
+#+LATEX_HEADER: \usepackage{amsmath}
+#+LATEX_HEADER: \usepackage{amssymb}
+#+LATEX_HEADER: \usepackage{gensymb}
+#+LATEX_HEADER: \usepackage[utf8]{inputenc}
+#+LATEX_HEADER: \usepackage[english,main=russian]{babel}
+#+LaTeX_CLASS: beamer
+#+LATEX_HEADER: \usepackage{xcolor}
+#+LATEX_HEADER: \pagecolor{black}
+#+LATEX_HEADER: \color{white}
+
 
 MFM - Minimal Forth Machine
 
@@ -8,6 +18,9 @@ x86 (32-bits), x86_64 (64b-bits), ...
 
 * Macroses
 
+:PROPERTIES:
+:VISIBILITY: children
+:END:
 ** WZ - Word Size
 
 #+NAME: m_wz
@@ -144,11 +157,13 @@ x86 (32-bits), x86_64 (64b-bits), ...
 
 * Tangle
 
-#+NAME: mfm
-#+BEGIN_SRC asm :tangle src/mfm.S :noweb yes :results output
   <<settings()>>
   <<base()>>
   <<start()>>
+
+#+NAME: mfm
+#+BEGIN_SRC asm :tangle src/mfm.S :noweb yes :results output
+  <<test()>>
 #+END_SRC
 
 #+NAME: base
@@ -170,16 +185,66 @@ x86 (32-bits), x86_64 (64b-bits), ...
       ))
 #+END_SRC
 
-#+NAME: start
-#+BEGIN_SRC elisp :var arg=sub_start
-  (print (macroexpand arg))
+C-x RET C-\ - (set-input-method)
+
+
+#+NAME: test
+#+BEGIN_SRC elisp :var arg=sub_test :results output
+  (defun re-asm (param)
+    (block ram
+      (if (string-equal "" param)
+          (return-from ram `(:empty))
+        (let ((result `(:ident ,(- (length param) (length (string-trim-left param))))))
+          (replace-regexp-in-string
+           "#\\(.*\\)" ;; comment-line
+           (lambda (in)
+             (setf result (append result `(:comment-line ,in)))
+             (return-from ram result))
+           param)
+          (replace-regexp-in-string
+           "\\(.*\\)\s+\\(.*\\)" ;; cmd
+           (lambda (in)
+             (let ((cmd (split-string (string-trim in))))
+               (print cmd)
+               (pcase cmd
+                 (`("mov" ,from ,to)
+                  (setf result (append result `(:cmd :mov :from ,from :to ,to)))))
+               ;; (setf result (append result `(:cmd ,cmd)))
+               (return-from ram result)))
+           param)))))
+
+  (mapcar #'(lambda (in) (princ "\n") (prin1 in))
+          (mapcar #'re-asm
+                  (split-string arg "\n" nil nil)))
 #+END_SRC
+
+#+NAME: sub_test
+#+BEGIN_EXAMPLE asm :noweb yes
+  # NEXT
+    # NEXTER
+      mov     (%IPR), %ACR
+      mov     (%IPR), %ACR # with comment
+      add     _wz_, %IPR
+
+      jmp     *(%ACR)
+      nop
+#+END_EXAMPLE
+
+
+
+#+NAME: start
+#+BEGIN_SRC elisp :var arg=sub_start :results value
+  ;; (print
+  ;;  (replace-regexp-in-string
+  ;;   "nop"
+  ;;   "lodsq" in t t))
+#+END_SRC
+
 
 [TODO:gmm] - Количество параметров командной строки
 [TODO:gmm] - Указатель на параметры командной строки
 
 [TODO:gmm] - псевдорегистры
-
 
 #+NAME: sub_start
 #+BEGIN_EXAMPLE asm :noweb yes
@@ -203,6 +268,6 @@ x86 (32-bits), x86_64 (64b-bits), ...
       [NEXT]
 
       .section .rodata
-  cold_start:                             # High-level code without a codeword.
+  cold_start:                 # High-level code without a codeword.
       .int QUIT
 #+END_EXAMPLE
