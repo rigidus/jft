@@ -1,0 +1,216 @@
+#+STARTUP: showall indent hidestars
+
+AASM - Abstract Assembler
+
+* Intro
+
+Я буду использовать emacs-lisp, чтобы сформировать некоторый
+"промежуточный ассемблер", который может быть скомпилирован под любую
+архитектуру, включая, но не ограничиваясь:
+- 8-разрядный AVR
+- 16-разрядный x86
+- 32-разрядный x86
+- 32-разрядный ARM
+- 64-разрядный x86_64
+- WebAssembly VM
+- ...
+
+Текущее состояние - Proof-of-Concept, требуется показать способность
+решения компилировать какой-то минимальный код, не зависящий от
+разрядности используемой архитектуры.
+
+* Minimal machine architecture
+
+Для функциионирования форт-машины требуется стек и минимальный набор
+абстрактных регистров:
+- %ACR - Accumilator Register
+- %IPR - Instruction Pointer Register
+- %RSR - Return Stack Register
+- %DSR - Data Stack Register
+- ...
+
+Я буду использовать эти регистры в своем коде "абстрактного ассемблера",
+а при компиляции они будут сопоставляться с конкретными выбранными
+регистрами целевого ассемблера, при этом целевой ассемблер я тоже напишу
+сам, чтобы иметь полную свободу применения любых оптимизаций
+
+* Minimal incoming code
+
+минимальный пример кода должен быть похож на код для gnu assembler, на
+который я опираюсь и иметь:
+- комментарии после команды до конца строки
+- коментарии, занимающие всю строку
+- некоторую поддержку отступов для удобства
+- пустые строки
+- двухоперандные команды перемещения значений (mov)
+  - из регистра в регистр
+  - из памяти в регистр
+  - из регистра в память
+- команды передачи управления (jmp)
+  - прямой регистровый переход - jmp (reg)
+- метки
+
+такого минимального синтаксиса будет достаточно для написания
+форт-машины, которая станет следующим уровнем языка. также такой подход
+позволяет восстановить исходный код после разбора (для удобства отладки)
+
+* Minimal code snippet
+
+эти несколько строчек кода включают все вышеперечисленные варианты. они
+поступают на вход процедуре разбора "абстрактного ассемблера"
+
+#+name: min_aasm
+#+begin_example asm
+
+  # first COMMENT
+    # COMMENT with indentation
+      mov     %IPR, %ACR     # mov reg to reg
+      mov     %IPR, %ACR
+      mov     (%IPR), %ACR   # mov mem to reg
+      mov     (%IPR), %ACR
+      mov     %IPR, (%ACR)   # mov reg to mem
+      mov     %IPR, (%ACR)
+      jmp     %IRP           # jmp reg
+      jmp     %IRP
+      jmp     _label         # jmp label
+      jmp     _label
+  _label_with_comment:       # this is label
+  _label:
+#+END_EXAMPLE
+
+* Parsing of Abstract Assembler Code
+
+Этот кусок кода разбирает минимальный сниппет кода на "абстрактном
+ассемблере", чтобы получить из него список S-выражений
+
+#+NAME: p_aasm
+#+BEGIN_SRC elisp :var arg=min_aasm :results value list pp
+  (defun p-aasm (param)
+    (block ram
+      (if (or (string-equal "" param)
+              (string-equal "" (string-trim-left param)))
+          (return-from ram `(:empty))
+        (let* ((out   `(:ident ,(- (length param) (length (string-trim-left param)))))
+               (param     (string-trim-left param))
+               (reg-size  4)
+               (reg     "\\(%[a-zA-Z]\\{3\\}\\)")
+               (case-fold-search nil))
+          (replace-regexp-in-string
+           "^#\\(.*\\)" ;; comment-line
+           (lambda (in)
+             (setf out (append out `(:comment-line ,in)))
+             (return-from ram out))
+           param)
+          (save-match-data ;; mov reg to reg
+            (and (string-match (concat "^mov\s*" reg "\s*,\s*" reg "\\(.*\\)") param)
+                 (return-from ram
+                   (append out `(:cmd :mov_reg_to_reg :from ,(match-string 1 param)
+                                      :to   ,(match-string 2 param)
+                                      :rest ,(match-string 3 param))))))
+          (save-match-data ;; mov mem to reg
+            (and (string-match (concat "^mov\s*(" reg ")\s*,\s*" reg "\\(.*\\)") param)
+                 (return-from ram
+                   (append out `(:cmd :mov_mem_to_reg :from ,(match-string 1 param)
+                                      :to   ,(match-string 2 param)
+                                      :rest ,(match-string 3 param))))))
+          (save-match-data ;; mov reg to mem
+            (and (string-match (concat "^mov\s*" reg "\s*,\s*(" reg ")\\(.*\\)") param)
+                 (return-from ram
+                   (append out `(:cmd :mov_reg_to_mem :from ,(match-string 1 param)
+                                      :to   ,(match-string 2 param)
+                                      :rest ,(match-string 3 param))))))
+          (save-match-data ;; jmp reg
+            (and (string-match (concat "^jmp\s*" reg "\\(.*\\)?$") param)
+                 (return-from ram
+                   (append out `(:cmd :jmp_reg
+                                      :to ,(car (split-string (match-string 1 param)))
+                                      :rest ,(match-string 2 param))))))
+          (save-match-data ;; jmp label
+            (and (string-match
+                  (concat "^jmp\s*" "\\([_a-zA-z]+\\)" "\s?\\(.*\\)?$") param)
+                 (return-from ram
+                   (append out `(:cmd :jmp_label
+                                      :to ,(car (split-string (match-string 1 param)))
+                                      :rest ,(match-string 2 param))))))
+          (save-match-data ;; label
+            (and (string-match
+                  (concat "^\\([_a-zA-Z]+\\):" "\s?\\(.*\\)?$") param)
+                 (return-from ram
+                   (append out `(:cmd :label
+                                      :name ,(car (split-string (match-string 1 param)))
+                                      :rest ,(match-string 2 param))))))
+          ))))
+
+  (mapcar #'(lambda (in) (princ "\n") (prin1 in))
+          (mapcar #'p-aasm
+                  (split-string arg "\n" nil nil)))
+#+END_SRC
+
+#+results: p_aasm
+#+begin_example
+- ((:empty)
+- (:ident 0 :comment-line "# first COMMENT")
+- (:ident 2 :comment-line "# COMMENT with indentation")
+- (:ident 4 :cmd :mov_reg_to_reg :from "%IPR" :to "%ACR" :rest "     # mov reg to reg")
+- (:ident 4 :cmd :mov_reg_to_reg :from "%IPR" :to "%ACR" :rest "")
+- (:ident 4 :cmd :mov_mem_to_reg :from "%IPR" :to "%ACR" :rest "   # mov mem to reg")
+- (:ident 4 :cmd :mov_mem_to_reg :from "%IPR" :to "%ACR" :rest "")
+- (:ident 4 :cmd :mov_reg_to_mem :from "%IPR" :to "%ACR" :rest "   # mov reg to mem")
+- (:ident 4 :cmd :mov_reg_to_mem :from "%IPR" :to "%ACR" :rest "")
+- (:ident 4 :cmd :jmp_reg :to "%IRP" :rest "           # jmp reg")
+- (:ident 4 :cmd :jmp_reg :to "%IRP" :rest "")
+- (:ident 4 :cmd :jmp_label :to "_label" :rest "        # jmp label")
+- (:ident 4 :cmd :jmp_label :to "_label" :rest "")
+- (:ident 0 :cmd :label :name "_label_with_comment" :rest "      # this is label")
+- (:ident 0 :cmd :label :name "_label" :rest "")
+- (:empty))
+#+end_example
+
+* GNU Assembler Producer
+
+Нужен для проверочных целей
+
+#+NAME: gas_producer
+#+BEGIN_SRC elisp :var arg=p_aasm :results output
+  (defun gas-emit (in)
+      (pcase in
+        (`(:empty)  "")
+        (`(:ident ,idnt :comment-line ,cmnt)
+         (princ (format "%s%s\n" (make-string idnt ? ) cmnt)))
+        (`(:ident ,idnt :cmd :mov_reg_to_reg :from ,from :to ,to :rest ,rest)
+         (princ (format "%smov     %s, %s%s\n" (make-string idnt ? ) from to rest)))
+        (`(:ident ,idnt :cmd :mov_mem_to_reg :from ,from :to ,to :rest ,rest)
+         (princ (format "%smov     (%s), %s%s\n" (make-string idnt ? ) from to rest)))
+        (`(:ident ,idnt :cmd :mov_reg_to_mem :from ,from :to ,to :rest ,rest)
+         (princ (format "%smov     %s, (%s)%s\n" (make-string idnt ? ) from to rest)))
+        (`(:ident ,idnt :cmd :jmp_reg :to ,to :rest ,rest)
+         (princ (format "%sjmp     %s%s\n" (make-string idnt ? ) to rest)))
+        (`(:ident ,idnt :cmd :jmp_label :to ,to :rest ,rest)
+         (princ (format "%sjmp     %s%s\n" (make-string idnt ? ) to rest)))
+        (`(:ident ,idnt :cmd :label :name ,name :rest ,rest)
+         (princ (format "%s%s%s\n" (make-string idnt ? ) name rest)))
+        (_  (print in))))
+
+  (mapcar #'gas-emit
+          (car (read-from-string arg)))
+#+END_SRC
+
+#+results: gas_producer
+#+begin_example
+# first COMMENT
+  # COMMENT with indentation
+    mov     %IPR, %ACR     # mov reg to reg
+    mov     %IPR, %ACR
+    mov     (%IPR), %ACR   # mov mem to reg
+    mov     (%IPR), %ACR
+    mov     %IPR, (%ACR)   # mov reg to mem
+    mov     %IPR, (%ACR)
+    jmp     %IRP           # jmp reg
+    jmp     %IRP
+    jmp     _label        # jmp label
+    jmp     _label
+_label_with_comment      # this is label
+_label
+#+end_example
+
+* TODO Opcode Producer

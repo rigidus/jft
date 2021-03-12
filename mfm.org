@@ -1,3 +1,5 @@
+#+STARTUP: showall indent hidestars
+
 MFM - Minimal Forth Machine
 
 * Intro
@@ -51,9 +53,8 @@ MFM - Minimal Forth Machine
   - из памяти в регистр
   - из регистра в память
 - команды передачи управления (jmp)
-  - коссвенный регистровый переход - jmp *(%reg)
-  - прямой регистровый переход - jmp (reg) [TODO:gmm]
-- загрузка констант [TODO:gmm]
+  - прямой регистровый переход - jmp (reg)
+- метки
 
 Такого минимального синтаксиса будет достаточно для написания
 форт-машины, которая станет следующим уровнем языка. Также такой подход
@@ -66,21 +67,21 @@ MFM - Minimal Forth Machine
 
 #+NAME: min_aasm
 #+BEGIN_EXAMPLE asm
+
   # FIRST COMMENT
     # COMMENT WITH INDENTATION
       mov     %IPR, %ACR     # mov reg to reg
+      mov     %IPR, %ACR
       mov     (%IPR), %ACR   # mov mem to reg
+      mov     (%IPR), %ACR
       mov     %IPR, (%ACR)   # mov reg to mem
-
-      add     _wz_, %IPR
-
-      jmp     *(%ACR)
-      nop
-      mov     -8(%ebp, %edx, 4), %eax  # Full example: load *(ebp + (edx * 4) - 8) into eax
-      mov     -4(%ebp), %eax           # Typical example: load a stack variable into eax
-      mov     (%ecx), %edx             # No index: copy the target of a pointer into a register
-      lea     8(,%eax,4), %eax         # Arithmetic: multiply eax by 4 and add 8
-      lea     (%edx,%eax,2), %eax      # Arithmetic: multiply eax by 2 and add edx
+      mov     %IPR, (%ACR)
+      jmp     %IRP           # jmp reg
+      jmp     %IRP
+      jmp     _label         # jmp label
+      jmp     _label
+  _label_with_comment:       # this is label
+  _label:
 #+END_EXAMPLE
 
 * Parsing of Abstract Assembler Code
@@ -105,53 +106,71 @@ MFM - Minimal Forth Machine
              (setf out (append out `(:comment-line ,in)))
              (return-from ram out))
            param)
-          (save-match-data
+          (save-match-data ;; mov reg to reg
             (and (string-match (concat "^mov\s*" reg "\s*,\s*" reg "\\(.*\\)") param)
                  (return-from ram
                    (append out `(:cmd :mov_reg_to_reg :from ,(match-string 1 param)
                                       :to   ,(match-string 2 param)
                                       :rest ,(match-string 3 param))))))
-          (save-match-data
+          (save-match-data ;; mov mem to reg
             (and (string-match (concat "^mov\s*(" reg ")\s*,\s*" reg "\\(.*\\)") param)
                  (return-from ram
                    (append out `(:cmd :mov_mem_to_reg :from ,(match-string 1 param)
                                       :to   ,(match-string 2 param)
                                       :rest ,(match-string 3 param))))))
-          (save-match-data
+          (save-match-data ;; mov reg to mem
             (and (string-match (concat "^mov\s*" reg "\s*,\s*(" reg ")\\(.*\\)") param)
                  (return-from ram
                    (append out `(:cmd :mov_reg_to_mem :from ,(match-string 1 param)
                                       :to   ,(match-string 2 param)
                                       :rest ,(match-string 3 param))))))
+          (save-match-data ;; jmp reg
+            (and (string-match (concat "^jmp\s*" reg "\\(.*\\)?$") param)
+                 (return-from ram
+                   (append out `(:cmd :jmp_reg
+                                      :to ,(car (split-string (match-string 1 param)))
+                                      :rest ,(match-string 2 param))))))
+          (save-match-data ;; jmp label
+            (and (string-match
+                  (concat "^jmp\s*" "\\([_a-zA-z]+\\)" "\s?\\(.*\\)?$") param)
+                 (return-from ram
+                   (append out `(:cmd :jmp_label
+                                      :to ,(car (split-string (match-string 1 param)))
+                                      :rest ,(match-string 2 param))))))
+          (save-match-data ;; label
+            (and (string-match
+                  (concat "^\\([_a-zA-z]+\\):" "\s?\\(.*\\)?$") param)
+                 (return-from ram
+                   (append out `(:cmd :label
+                                      :name ,(car (split-string (match-string 1 param)))
+                                      :rest ,(match-string 2 param))))))
           ))))
 
   (mapcar #'(lambda (in) (princ "\n") (prin1 in))
           (mapcar #'p-aasm
                   (split-string arg "\n" nil nil)))
-
 #+END_SRC
 
 #+results: p_aasm
 #+begin_example
 
+(:empty)
 (:ident 0 :comment-line "# FIRST COMMENT")
 (:ident 2 :comment-line "# COMMENT WITH INDENTATION")
 (:ident 4 :cmd :mov_reg_to_reg :from "%IPR" :to "%ACR" :rest "     # mov reg to reg")
+(:ident 4 :cmd :mov_reg_to_reg :from "%IPR" :to "%ACR" :rest "")
 (:ident 4 :cmd :mov_mem_to_reg :from "%IPR" :to "%ACR" :rest "   # mov mem to reg")
+(:ident 4 :cmd :mov_mem_to_reg :from "%IPR" :to "%ACR" :rest "")
 (:ident 4 :cmd :mov_reg_to_mem :from "%IPR" :to "%ACR" :rest "   # mov reg to mem")
-(:empty)
-nil
-(:empty)
-nil
-nil
-nil
-nil
-(:ident 4 :cmd :mov_mem_to_reg :from "%ecx" :to "%edx" :rest "             # No index: copy the target of a pointer into a register")
-nil
-nil
+(:ident 4 :cmd :mov_reg_to_mem :from "%IPR" :to "%ACR" :rest "")
+(:ident 4 :cmd :jmp_reg :to "%IRP" :rest "           # jmp reg")
+(:ident 4 :cmd :jmp_reg :to "%IRP" :rest "")
+(:ident 4 :cmd :jmp_label :to "_label" :rest "        # jmp label")
+(:ident 4 :cmd :jmp_label :to "_label" :rest "")
+(:ident 0 :cmd :label :name "_label_with_comment" :rest "      # this is label")
+(:ident 0 :cmd :label :name "_label" :rest "")
 (:empty)
 #+end_example
-
 
 * Macroses
 
