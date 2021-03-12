@@ -1,20 +1,157 @@
-#+STARTUP: showall indent hidestars
-#+LATEX_HEADER: \usepackage{amsmath}
-#+LATEX_HEADER: \usepackage{amssymb}
-#+LATEX_HEADER: \usepackage{gensymb}
-#+LATEX_HEADER: \usepackage[utf8]{inputenc}
-#+LATEX_HEADER: \usepackage[english,main=russian]{babel}
-#+LaTeX_CLASS: beamer
-#+LATEX_HEADER: \usepackage{xcolor}
-#+LATEX_HEADER: \pagecolor{black}
-#+LATEX_HEADER: \color{white}
-
-
 MFM - Minimal Forth Machine
 
-* Targets
+* Intro
 
-x86 (32-bits), x86_64 (64b-bits), ...
+Цель этого шага - написание минимальной форт-машины, полностью
+независимым от платформы и внешнего компилятора образом.
+
+На её базе будет написан более высокоуровневый язык, способный
+скомпилировать эту форт-машину без внешнего компилятора (bootstaping).
+
+Пока такого языка еще нет я буду использовать emacs-lisp, чтобы
+сформировать некоторый "промежуточный ассемблер", который может быть
+скомпилирован под любую архитектуру, включая, но не ограничиваясь:
+- 8-разрядный AVR
+- 16-разрядный x86
+- 32-разрядный x86
+- 32-разрядный ARM
+- 64-разрядный x86_64
+- WebAssembly VM
+- ...
+
+Текущее состояние - Proof-of-Concept, требуется показать способность
+решения компилировать какой-то минимальный код, не зависящий от
+разрядности используемой архитектуры.
+
+* Minimal Machine Architecture
+
+Для функциионирования форт-машины требуется стек и минимальный набор
+абстрактных регистров:
+- %ACR - Accumilator Register
+- %IPR - Instruction Pointer Register
+- %RSR - Return Stack Register
+- %DSR - Data Stack Register
+- ...
+
+Я буду использовать эти регистры в своем коде "абстрактного ассемблера",
+а при компиляции они будут сопоставляться с конкретными выбранными
+регистрами целевого ассемблера, при этом целевой ассемблер я тоже напишу
+сам, чтобы иметь полную свободу применения любых оптимизаций
+
+* Minimal incoming code
+
+Минимальный пример кода должен быть похож на код для GNU Assembler, на
+который я опираюсь и иметь:
+- комментарии после команды до конца строки
+- коментарии, занимающие всю строку
+- некоторую поддержку отступов для удобства
+- пустые строки
+- двухоперандные команды перемещения значений (mov)
+  - из регистра в регистр
+  - из памяти в регистр
+  - из регистра в память
+- команды передачи управления (jmp)
+  - коссвенный регистровый переход - jmp *(%reg)
+  - прямой регистровый переход - jmp (reg) [TODO:gmm]
+- загрузка констант [TODO:gmm]
+
+Такого минимального синтаксиса будет достаточно для написания
+форт-машины, которая станет следующим уровнем языка. Также такой подход
+позволяет восстановить исходный код после разбора (для удобства отладки)
+
+** Minimal Code Snippet
+
+Эти несколько строчек кода включают все вышеперечисленные варианты. Они
+поступают на вход процедуре разбора "абстрактного ассемблера"
+
+#+NAME: min_aasm
+#+BEGIN_EXAMPLE asm
+  # FIRST COMMENT
+    # COMMENT WITH INDENTATION
+      mov     %IPR, %ACR     # mov reg to reg
+      mov     (%IPR), %ACR   # mov mem to reg
+      mov     %IPR, (%ACR)   # mov reg to mem
+
+      add     _wz_, %IPR
+
+      jmp     *(%ACR)
+      nop
+      mov     -8(%ebp, %edx, 4), %eax  # Full example: load *(ebp + (edx * 4) - 8) into eax
+      mov     -4(%ebp), %eax           # Typical example: load a stack variable into eax
+      mov     (%ecx), %edx             # No index: copy the target of a pointer into a register
+      lea     8(,%eax,4), %eax         # Arithmetic: multiply eax by 4 and add 8
+      lea     (%edx,%eax,2), %eax      # Arithmetic: multiply eax by 2 and add edx
+#+END_EXAMPLE
+
+* Parsing of Abstract Assembler Code
+
+Этот кусок кода разбирает минимальный сниппет кода на "абстрактном
+ассемблере", чтобы получить из него список S-выражений
+
+#+NAME: p_aasm
+#+BEGIN_SRC elisp :var arg=min_aasm :results output
+  (defun p-aasm (param)
+    (block ram
+      (if (or (string-equal "" param)
+              (string-equal "" (string-trim-left param)))
+          (return-from ram `(:empty))
+        (let* ((out   `(:ident ,(- (length param) (length (string-trim-left param)))))
+               (param     (string-trim-left param))
+               (reg-size  4)
+               (reg     "\\(%[a-z]\\{3\\}\\)"))
+          (replace-regexp-in-string
+           "^#\\(.*\\)" ;; comment-line
+           (lambda (in)
+             (setf out (append out `(:comment-line ,in)))
+             (return-from ram out))
+           param)
+          (save-match-data
+            (and (string-match (concat "^mov\s*" reg "\s*,\s*" reg "\\(.*\\)") param)
+                 (return-from ram
+                   (append out `(:cmd :mov_reg_to_reg :from ,(match-string 1 param)
+                                      :to   ,(match-string 2 param)
+                                      :rest ,(match-string 3 param))))))
+          (save-match-data
+            (and (string-match (concat "^mov\s*(" reg ")\s*,\s*" reg "\\(.*\\)") param)
+                 (return-from ram
+                   (append out `(:cmd :mov_mem_to_reg :from ,(match-string 1 param)
+                                      :to   ,(match-string 2 param)
+                                      :rest ,(match-string 3 param))))))
+          (save-match-data
+            (and (string-match (concat "^mov\s*" reg "\s*,\s*(" reg ")\\(.*\\)") param)
+                 (return-from ram
+                   (append out `(:cmd :mov_reg_to_mem :from ,(match-string 1 param)
+                                      :to   ,(match-string 2 param)
+                                      :rest ,(match-string 3 param))))))
+          ))))
+
+  (mapcar #'(lambda (in) (princ "\n") (prin1 in))
+          (mapcar #'p-aasm
+                  (split-string arg "\n" nil nil)))
+
+#+END_SRC
+
+#+results: p_aasm
+#+begin_example
+
+(:ident 0 :comment-line "# FIRST COMMENT")
+(:ident 2 :comment-line "# COMMENT WITH INDENTATION")
+(:ident 4 :cmd :mov_reg_to_reg :from "%IPR" :to "%ACR" :rest "     # mov reg to reg")
+(:ident 4 :cmd :mov_mem_to_reg :from "%IPR" :to "%ACR" :rest "   # mov mem to reg")
+(:ident 4 :cmd :mov_reg_to_mem :from "%IPR" :to "%ACR" :rest "   # mov reg to mem")
+(:empty)
+nil
+(:empty)
+nil
+nil
+nil
+nil
+(:ident 4 :cmd :mov_mem_to_reg :from "%ecx" :to "%edx" :rest "             # No index: copy the target of a pointer into a register")
+nil
+nil
+(:empty)
+#+end_example
+
 
 * Macroses
 
@@ -151,7 +288,7 @@ x86 (32-bits), x86_64 (64b-bits), ...
   (setq *_wz_*  "0x08")  ;; |   4 | 2
   (setq *!*     "q")     ;; |   l | d  - Suffix of operand
   (setq *%ACR*  "%rax")  ;; | eax | ax - Accumulator Register
-  (setq *%IPR*  "%rsi")  ;; | esi | si - Insturction Pointer Register
+  (setq *%IPR*  "%rsi")  ;; | esi | si - Instruction Pointer Register
   (setq *%RSR*  "%rbp")  ;; | ebp | bp - Return Stack Register
 #+END_SRC
 
