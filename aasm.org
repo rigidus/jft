@@ -213,4 +213,96 @@ _label_with_comment      # this is label
 _label
 #+end_example
 
-* TODO Opcode Producer
+* START Opcode Producer
+
+Каждая инструкция (почти) любого процессора имеет некоторый ~требуемый
+эффект~, ради которого мы ее применяем. Обычно эффект выражается в
+изменении регистров, памяти и флагов процессора.
+
+Часто этот же требуемый эффект может быть достигнут комбинацией других
+инструкций. Это дает нам возможность строить эквивалентные программы для
+любых целей (оптимизация по скорости и размеру кода, обфускация, и.т.п)
+
+Также у инструкции может быть ~побочный эффект~ (что еще изменяет эта
+инструкция, кроме требуемого эффекта). На такие ~побочные эффекты~ можно
+наложить ограничения, которые сработают при поиске и выборе нужных
+инструкций, когда мы строим программу по эффектам.
+
+Пользуясь данными об эффектах мы можем запустить солвер, чтобы построить
+необходимую программу.
+
+Для задачи построения виртуальной машины это не требуется, но если сейчас
+заложить несколько вариантов достижения ~требуемых эффектов~, это может
+пригодиться для генерализации подхода.
+
+[TODO:gmm] - Написать солвер
+
+** x86_64 Producer
+
+Обычная инструкция на x86_64 имеет переменную длину (до 15 байт) и может
+состоять из нескольких компонентов, порядок которых определен:
+- Legacy prefixes (1-4 bytes, optional)
+- Opcode with prefixes (1-4 bytes, required)
+- ModR/M (1 byte, может отсутствовать, если опкод не имеет явных
+  операндов)
+- SIB (1 byte, для адресации операндов в памяти - может отсутствовать)
+- Displacement (1, 2, 4 or 8 bytes, if required)
+- Immediate (1, 2, 4 or 8 bytes, if required)
+
+--skiped:https://www.youtube.com/watch?v=CUAXCeRjw3c:--
+
+- Prefixes (REX, VEX : https://habr.com/ru/company/intel/blog/200598/)
+  Использование REX позволяет расширить набор регистров r0-r8
+ModRM:
+- mod[7:6] - 4 метода адресации
+  -  11b - register-direct
+  - !11b - other addressing
+- reg[.R, 5:3] - register-based operand or extend operation encoding
+- r/m[.B, 2:0] – register or memory operand when combined with mod field.
+- Addressing mode can include a following SIB byte {mod=00b,r/m=101b}
+
+*** mov_reg_to_reg_x86_64
+
+Opcode:
+- 89/r - MOV reg/mem64, reg64 - Move the contents of a 64-bit register to
+  a 64-bit destination register or memory operand
+- 8B/r - MOV reg64, reg/mem64 - Move the contents of a 64-bit register or
+  memory operand to a 64-bit destination register.
+
+ModR/M - [mod:7:6][reg:5:3][r/m:2:0]
+mod = 11b - register-direct-addressing mode
+reg: register
+rm: regster
+
+#+NAME: mov_reg_to_reg_x86_64
+#+BEGIN_SRC elisp
+  (defun reg86_to_bits (reg)
+    "Переводит регистр в биты для mod/rm"
+    (cond
+      ((string= reg "%EAX")  "000")
+      ((string= reg "%ECX")  "001")
+      ((string= reg "%EDX")  "010")
+      ((string= reg "%EBX")  "011")
+      ((string= reg "%ESP")  "100")
+      ((string= reg "%ESI")  "110")
+      ((string= reg "%EDI")  "111")
+      (t (error "unknown-register"))))
+
+  (defun get-cmd-plist-x86_64--mov-reg-to-reg (from to)
+    (list :op #x8B
+          :mod "11" ;; direct-register
+          :reg (reg86_to_bits from)
+          :rm  (reg86_to_bits to)))
+
+  (defun cmd-plist-to-bytes (in)
+    `(,(getf in :op)
+      ,(car (read-from-string (concat "#b" (getf in :mod) (getf in :reg) (getf in :rm))))))
+
+  (mapcar #'(lambda (in)
+              (format "%X" in))
+          (cmd-plist-to-bytes
+           (get-cmd-plist-x86_64--mov-reg-to-reg "%EAX" "%EBX")))
+#+END_SRC
+
+* TODO Elf maker
+* TODO Disassembler
