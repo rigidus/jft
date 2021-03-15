@@ -252,7 +252,7 @@ _label
 --skiped:https://www.youtube.com/watch?v=CUAXCeRjw3c:--
 
 - Prefixes (REX, VEX : https://habr.com/ru/company/intel/blog/200598/)
-  Использование REX позволяет расширить набор регистров r0-r8
+  Использование REX позволяет расширить набор регистров r8-r15
 ModRM:
 - mod[7:6] - 4 метода адресации
   -  11b - register-direct
@@ -263,6 +263,9 @@ ModRM:
 
 *** mov_reg_to_reg_x86_64
 
+Prefix
+- RAX - если нужен
+- 0x66 - [TODO:gmm] префикс изменения размера операнда
 Opcode:
 - 89/r - MOV reg/mem64, reg64 - Move the contents of a 64-bit register to
   a 64-bit destination register or memory operand
@@ -272,7 +275,7 @@ Opcode:
 ModR/M - [mod:7:6][reg:5:3][r/m:2:0]
 mod = 11b - register-direct-addressing mode
 reg: register
-rm: regster
+mem: regster
 
 #+NAME: mov_reg_to_reg_x86_64
 #+BEGIN_SRC elisp
@@ -341,14 +344,16 @@ rm: regster
   (defun get-cmd-plist-x86--mov-reg-to-reg (from to)
     (let ((reg1  (get-x86-reg from))
           (reg2  (get-x86-reg to))
-          (rex nil))
-      (if (and (getf reg1 :rex-w)
-               (getf reg2 :rex-w))
-          (progn
-            (setf (getf rex :w) t)
-            (setf reg1 (getf reg1 :reg))
-            (setf reg2 (getf reg2 :reg)))
-        (error "rex-w mismatch"))
+          (rex   nil))
+      (cond ((and (plist-member reg1 :rex-w) (plist-member reg2 :rex-w))
+             (progn (setf (getf rex :w) t)
+                    (setf reg1 (getf reg1 :reg))
+                    (setf reg2 (getf reg2 :reg))))
+            ((null (or (plist-member reg1 :rex-w) (plist-member reg2 :rex-w)))
+             (progn (setf reg1 (getf reg1 :reg))
+                    (setf reg2 (getf reg2 :reg))))
+            (t (let ((errstr (format "rex-w mismatch %s %s" from to)))
+                 (error errstr))))
       (values
        `(:rex ,rex :op #x89 :mod #b11 :reg ,reg1 :mem ,reg2)
        `(:rex ,rex :op #x8B :mod #b11 :reg ,reg2 :mem ,reg1))))
@@ -373,9 +378,9 @@ rm: regster
         (setf acc (append acc (list modrm))))
       acc))
 
-  ;; (mapcar #'(lambda (in)
-  ;;             (format "%X" in))
-  ;;         (cmd-plist-to-bytes (cadr (get-cmd-plist-x86--mov-reg-to-reg "%RSI" "%RDI"))))
+  (mapcar #'(lambda (in)
+              (format "%X" in))
+          (cmd-plist-to-bytes (cadr (get-cmd-plist-x86--mov-reg-to-reg "%ESI" "%EDI"))))
 #+END_SRC
 
 * TODO Elf maker
