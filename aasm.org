@@ -279,55 +279,60 @@ mem: regster
 
 #+NAME: mov_reg_to_reg_x86_64
 #+BEGIN_SRC elisp
-  (defmacro one-of-this-string (var &rest strings)
+  (defmacro one-of-them (var &rest vals)
     (let ((acc))
-      (dolist (elt strings)
-        (push `(string= ,var ,elt) acc))
+      (dolist (elt vals)
+        (push `(equal ,var ,elt) acc))
       (setq acc (reverse acc))
       (push 'or acc)
       acc))
 
+  ;; (macroexpand '(one-of-them reg :%al :%ax :%eax :%rax))
+
+
   (defun get-x86-reg (reg)
     "Переводит регистр в биты для mod/rm"
     (let ((acc (block reg
-                 (and (one-of-this-string reg "%AL" "%AX" "%EAX" "%RAX")
-                      (return-from reg (append acc (list :reg #b000))))
-                 (and (one-of-this-string reg "%CL" "%CX" "%ECX" "%RCX")
-                      (return-from reg (list :reg #b001)))
-                 (and (one-of-this-string reg "%DL" "%DX" "%EDX" "%EDX")
-                      (return-from reg (list :reg #b010)))
-                 (and (one-of-this-string reg "%BL" "%BX" "%EBX" "%RBX")
-                      (return-from reg (list :reg #b011)))
-                 (and (one-of-this-string reg "%AH" "%SP" "%ESP" "%RSP")
-                      (return-from reg (list :reg #b100)))
-                 (and (one-of-this-string reg "%CH" "%BP" "%EBP" "%RBP" "%BPL")
-                      (return-from reg (list :reg #b101)))
-                 (and (one-of-this-string reg "%DH" "%SI" "%ESI" "%RSI" "%SIL")
-                      (return-from reg (list :reg #b110)))
-                 (and (one-of-this-string reg "%BH" "%DI" "%EDI" "%RDI" "%DIL")
-                      (return-from reg (list :reg #b111)))
-                 (and (one-of-this-string reg "%R8B" "%R8W" "%R8D" "%R8")
-                      (return-from reg (list :reg #b000)))
-                 (and (one-of-this-string reg "%R9B" "%R9W" "%R9D" "%R9")
-                      (return-from reg (list :reg #b001 :rex-w 1)))
-                 (and (one-of-this-string reg "%R10B" "%R10W" "%R10D" "%R10")
-                      (return-from reg (list :reg #b010 :rex-w 1)))
-                 (and (one-of-this-string reg "%R11B" "%R11W" "%R11D" "%R11")
-                      (return-from reg (list :reg #b011 :rex-w 1)))
-                 (and (one-of-this-string reg "%R12B" "%R12W" "%R12D" "%R12")
-                      (return-from reg (list :reg #b100 :rex-w 1)))
-                 (and (one-of-this-string reg "%R13B" "%R13W" "%R13D" "%R13")
-                      (return-from reg (list :reg #b101 :rex-w 1)))
-                 (and (one-of-this-string reg "%R14B" "%R14W" "%R14D" "%R14")
-                      (return-from reg (list :reg #b110 :rex-w 1)))
-                 (and (one-of-this-string reg "%R15B" "%R15W" "%R15D" "%R15")
-                      (return-from reg (list :reg #b111 :rex-w 1)))
+                 (when (one-of-them reg :%al :%ax :%eax :%rax)
+                   (return-from reg (list :reg #b000)))
+                 (when (one-of-them reg :%cl :%cx :%ecx :%rcx)
+                   (return-from reg (list :reg #b001)))
+                 (when (one-of-them reg :%dl :%dx :%edx :%edx)
+                   (return-from reg (list :reg #b010)))
+                 (when (one-of-them reg :%bl :%bx :%ebx :%rbx)
+                   (return-from reg (list :reg #b011)))
+                 (when (one-of-them reg :%ah :%sp :%esp :%rsp)
+                   (return-from reg (list :reg #b100)))
+                 (when (one-of-them reg :%ch :%bp :%ebp :%rbp :%bpl)
+                   (return-from reg (list :reg #b101)))
+                 (when (one-of-them reg :%dh :%si :%esi :%rsi :%sil)
+                   (return-from reg (list :reg #b110)))
+                 (when (one-of-them reg :%bh :%di :%edi :%rdi :%dil)
+                   (return-from reg (list :reg #b111)))
+                 (when (one-of-them reg :%r8b :%r8w :%r8d :%r8)
+                   (return-from reg (list :reg #b000)))
+                 (when (one-of-them reg :%r9b :%r9w :%r9d :%r9)
+                   (return-from reg (list :reg #b001 :rex-w 1)))
+                 (when (one-of-them reg :%r10b :%r10w :%r10d :%r10)
+                   (return-from reg (list :reg #b010 :rex-w 1)))
+                 (when (one-of-them reg :%r11b :%r11w :%r11d :%r11)
+                   (return-from reg (list :reg #b011 :rex-w 1)))
+                 (when (one-of-them reg :%r12b :%r12w :%r12d :%r12)
+                   (return-from reg (list :reg #b100 :rex-w 1)))
+                 (when (one-of-them reg :%r13b :%r13w :%r13d :%r13)
+                   (return-from reg (list :reg #b101 :rex-w 1)))
+                 (when (one-of-them reg :%r14b :%r14w :%r14d :%r14)
+                   (return-from reg (list :reg #b110 :rex-w 1)))
+                 (when (one-of-them reg :%r15b :%r15w :%r15d :%r15)
+                   (return-from reg (list :reg #b111 :rex-w 1)))
                  (error "unknown-register"))))
-      (when (or (one-of-this-string reg "%BPL" "%SIL" "%DIL")
+      (when (or (one-of-them reg :%bpl :%sil :%dil)
                 (and (null (getf acc :rex-w))
-                     (string= "%R" (substring reg 0 2))))
+                     (string= ":%r" (substring (symbol-name reg) 0 3))))
         (setf (getf acc :rex-w) 1))
       acc))
+
+  ;; (get-x86-reg :%rsi)
 
 
   (defun int-to-binary-string (i)
@@ -340,6 +345,7 @@ mem: regster
           (setq res "0"))
       res))
 
+  ;; (int-to-binary-string 6)
 
   (defun get-cmd-plist-x86--mov-reg-to-reg (from to)
     (let ((reg1  (get-x86-reg from))
@@ -357,6 +363,8 @@ mem: regster
       (values
        `(:rex ,rex :op #x89 :mod #b11 :reg ,reg1 :mem ,reg2)
        `(:rex ,rex :op #x8B :mod #b11 :reg ,reg2 :mem ,reg1))))
+
+  ;; (get-cmd-plist-x86--mov-reg-to-reg :%esi :%edi)
 
 
   (defun cmd-plist-to-bytes (in)
@@ -378,9 +386,9 @@ mem: regster
         (setf acc (append acc (list modrm))))
       acc))
 
-  (mapcar #'(lambda (in)
-              (format "%X" in))
-          (cmd-plist-to-bytes (cadr (get-cmd-plist-x86--mov-reg-to-reg "%ESI" "%EDI"))))
+  ;; (mapcar #'(lambda (in)
+  ;;             (format "%X" in))
+  ;;         (cmd-plist-to-bytes (cadr (get-cmd-plist-x86--mov-reg-to-reg :%rsi :%rdi))))
 #+END_SRC
 
 * TODO Elf maker
