@@ -17,3 +17,26 @@
 - чтобы будущий лисп мог самостоятельно производить машинный код
 
 [[file:aasm.org][Abstract Assembler]]
+
+[TODO:gmm] Также необходимо уметь создавать исполняемые файлы
+
+* Minimal Forth Machine
+
+Далее на абстрактном ассемблере мы пишем минимальную форт-машину, чтобы
+уже на ней написать все остальное.
+
+[[file:mfm.org][Minimal Forth Mashine]]
+
+* TODO Forth Assembler
+
+Побочный вариант нужный для JIT-компиляции
+
+* TODO Garbage Collector
+
+Нужен для лиспа
+
+* TODO Minimal Lisp System
+
+* TODO Prolog-like solver
+
+* TODO Something else
