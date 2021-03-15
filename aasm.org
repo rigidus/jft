@@ -338,24 +338,44 @@ rm: regster
       res))
 
 
-  (int-to-binary-string 7)
-
   (defun get-cmd-plist-x86--mov-reg-to-reg (from to)
-    (list :op #x8B
-          :mod #b11 ;; direct-register
-          :reg (get-x86-reg from)
-          :rm  (get-x86-reg to)))
+    (let ((reg1  (get-x86-reg from))
+          (reg2  (get-x86-reg to))
+          (rex nil))
+      (if (and (getf reg1 :rex-w)
+               (getf reg2 :rex-w))
+          (progn
+            (setf (getf rex :w) t)
+            (setf reg1 (getf reg1 :reg))
+            (setf reg2 (getf reg2 :reg)))
+        (error "rex-w mismatch"))
+      (values
+       `(:rex ,rex :op #x89 :mod #b11 :reg ,reg1 :mem ,reg2)
+       `(:rex ,rex :op #x8B :mod #b11 :reg ,reg2 :mem ,reg1))))
 
-  (get-cmd-plist-x86--mov-reg-to-reg "%ESI" "%RDI")
 
   (defun cmd-plist-to-bytes (in)
-    `(,(getf in :op)
-      ,(car (read-from-string (concat "#b" (getf in :mod) (getf in :reg) (getf in :rm))))))
+    (let ((acc)
+          (rex-plist (getf in :rex))
+          (rex #x40))
+      ;; rex if needed
+      (if (not (null rex-plist))
+          (when (getf rex-plist :w)
+            (setf rex (logior rex #x8))
+            (setf acc (append acc (list rex)))))
+      ;; opcode
+      (setf acc (append acc (list (getf in :op))))
+      ;; modrm
+      (let ((modrm 0))
+        (setf modrm (ash (getf in :mod) 6))
+        (setf modrm (logior modrm (ash (getf in :reg) 3)))
+        (setf modrm (logior modrm (getf in :mem)))
+        (setf acc (append acc (list modrm))))
+      acc))
 
-  (mapcar #'(lambda (in)
-              (format "%X" in))
-          (cmd-plist-to-bytes
-           (get-cmd-plist-x86_64--mov-reg-to-reg "%EAX" "%EBX")))
+  ;; (mapcar #'(lambda (in)
+  ;;             (format "%X" in))
+  ;;         (cmd-plist-to-bytes (cadr (get-cmd-plist-x86--mov-reg-to-reg "%RSI" "%RDI"))))
 #+END_SRC
 
 * TODO Elf maker
