@@ -276,23 +276,77 @@ rm: regster
 
 #+NAME: mov_reg_to_reg_x86_64
 #+BEGIN_SRC elisp
-  (defun reg86_to_bits (reg)
-    "Переводит регистр в биты для mod/rm"
-    (cond
-      ((string= reg "%EAX")  "000")
-      ((string= reg "%ECX")  "001")
-      ((string= reg "%EDX")  "010")
-      ((string= reg "%EBX")  "011")
-      ((string= reg "%ESP")  "100")
-      ((string= reg "%ESI")  "110")
-      ((string= reg "%EDI")  "111")
-      (t (error "unknown-register"))))
+  (defmacro one-of-this-string (var &rest strings)
+    (let ((acc))
+      (dolist (elt strings)
+        (push `(string= ,var ,elt) acc))
+      (setq acc (reverse acc))
+      (push 'or acc)
+      acc))
 
-  (defun get-cmd-plist-x86_64--mov-reg-to-reg (from to)
+  (defun get-x86-reg (reg)
+    "Переводит регистр в биты для mod/rm"
+    (let ((acc (block reg
+                 (and (one-of-this-string reg "%AL" "%AX" "%EAX" "%RAX")
+                      (return-from reg (append acc (list :reg #b000))))
+                 (and (one-of-this-string reg "%CL" "%CX" "%ECX" "%RCX")
+                      (return-from reg (list :reg #b001)))
+                 (and (one-of-this-string reg "%DL" "%DX" "%EDX" "%EDX")
+                      (return-from reg (list :reg #b010)))
+                 (and (one-of-this-string reg "%BL" "%BX" "%EBX" "%RBX")
+                      (return-from reg (list :reg #b011)))
+                 (and (one-of-this-string reg "%AH" "%SP" "%ESP" "%RSP")
+                      (return-from reg (list :reg #b100)))
+                 (and (one-of-this-string reg "%CH" "%BP" "%EBP" "%RBP" "%BPL")
+                      (return-from reg (list :reg #b101)))
+                 (and (one-of-this-string reg "%DH" "%SI" "%ESI" "%RSI" "%SIL")
+                      (return-from reg (list :reg #b110)))
+                 (and (one-of-this-string reg "%BH" "%DI" "%EDI" "%RDI" "%DIL")
+                      (return-from reg (list :reg #b111)))
+                 (and (one-of-this-string reg "%R8B" "%R8W" "%R8D" "%R8")
+                      (return-from reg (list :reg #b000)))
+                 (and (one-of-this-string reg "%R9B" "%R9W" "%R9D" "%R9")
+                      (return-from reg (list :reg #b001 :rex-w 1)))
+                 (and (one-of-this-string reg "%R10B" "%R10W" "%R10D" "%R10")
+                      (return-from reg (list :reg #b010 :rex-w 1)))
+                 (and (one-of-this-string reg "%R11B" "%R11W" "%R11D" "%R11")
+                      (return-from reg (list :reg #b011 :rex-w 1)))
+                 (and (one-of-this-string reg "%R12B" "%R12W" "%R12D" "%R12")
+                      (return-from reg (list :reg #b100 :rex-w 1)))
+                 (and (one-of-this-string reg "%R13B" "%R13W" "%R13D" "%R13")
+                      (return-from reg (list :reg #b101 :rex-w 1)))
+                 (and (one-of-this-string reg "%R14B" "%R14W" "%R14D" "%R14")
+                      (return-from reg (list :reg #b110 :rex-w 1)))
+                 (and (one-of-this-string reg "%R15B" "%R15W" "%R15D" "%R15")
+                      (return-from reg (list :reg #b111 :rex-w 1)))
+                 (error "unknown-register"))))
+      (when (or (one-of-this-string reg "%BPL" "%SIL" "%DIL")
+                (and (null (getf acc :rex-w))
+                     (string= "%R" (substring reg 0 2))))
+        (setf (getf acc :rex-w) 1))
+      acc))
+
+
+  (defun int-to-binary-string (i)
+    "convert an integer into it's binary representation in string format"
+    (let ((res ""))
+      (while (not (= i 0))
+        (setq res (concat (if (= 1 (logand i 1)) "1" "0") res))
+        (setq i (lsh i -1)))
+      (if (string= res "")
+          (setq res "0"))
+      res))
+
+
+  (int-to-binary-string 7)
+
+  (defun get-cmd-plist-x86--mov-reg-to-reg (from to)
     (list :op #x8B
-          :mod "11" ;; direct-register
-          :reg (reg86_to_bits from)
-          :rm  (reg86_to_bits to)))
+          :mod #b11 ;; direct-register
+          :reg (get-x86-reg from)
+          :rm  (get-x86-reg to)))
+
+  (get-cmd-plist-x86--mov-reg-to-reg "%ESI" "%RDI")
 
   (defun cmd-plist-to-bytes (in)
     `(,(getf in :op)
