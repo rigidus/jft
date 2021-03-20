@@ -25,7 +25,7 @@
 Далее на абстрактном ассемблере мы пишем минимальную форт-машину, чтобы
 уже на ней написать все остальное.
 
-[[file:mfm.org][Minimal Forth Mashine]]
+[[file:mfm.org][Minimal Forth Maсhine]]
 
 * TODO Forth Assembler
 

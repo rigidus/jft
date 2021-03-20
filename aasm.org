@@ -304,7 +304,7 @@ Opcode:
 ModR/M - [mod:7:6][reg:5:3][r/m:2:0]
 mod = 11b - register-direct-addressing mode
 reg: register
-mem: regster
+mem: register
 
 #+NAME: mov_reg_to_reg_x86_64
 #+BEGIN_SRC elisp
@@ -317,7 +317,6 @@ mem: regster
       acc))
 
   ;; (macroexpand '(one-of-them reg :%al :%ax :%eax :%rax))
-
 
   (defun get-x86-reg (reg)
     "Переводит регистр в биты для mod/rm"
@@ -417,8 +416,14 @@ mem: regster
 
   ;; (mapcar #'(lambda (in)
   ;;             (format "%X" in))
-  ;;         (cmd-plist-to-bytes (cadr (get-cmd-plist-x86--mov-reg-to-reg :%rsi :%rdi))))
+  ;;         (cmd-plist-to-bytes
+  ;;          (cadr (get-cmd-plist-x86--mov-reg-to-reg :%esi :%edi))))
 #+END_SRC
+
+#+results: mov_reg_to_reg_x86_64
+: cmd-plist-to-bytes
+
+*** TODO je_x86_64
 
 * TODO Elf maker
 * TODO Disassembler
