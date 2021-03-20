@@ -37,10 +37,13 @@
 
 * TODO Minimal Lisp System
 
-* TODO Prolog-like solver (SAT)
+* TODO Prolog-like solver (SAT) and Planner features
 
-* TODO Planner features
+- Резолюция
+- Унификация
 
 * TODO Refal features
+
+- Суперкомпиляция
 
 * TODO Something else

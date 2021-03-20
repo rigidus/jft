@@ -51,7 +51,7 @@ JIT-компиляцию.
 * Minimal machine architecture
 
 Для функциионирования форт-машины требуется стек и минимальный набор
-абстрактных регистров:
+абстрактных регистров, которые позже будут мапиться на реальные:
 - %ACR - Accumilator Register
 - %IPR - Instruction Pointer Register
 - %RSR - Return Stack Register
