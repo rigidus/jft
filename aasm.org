@@ -392,8 +392,7 @@ mem: register
        `(:rex ,rex :op #x89 :mod #b11 :reg ,reg1 :mem ,reg2)
        `(:rex ,rex :op #x8B :mod #b11 :reg ,reg2 :mem ,reg1))))
 
-  ;; (get-cmd-plist-x86--mov-reg-to-reg :%esi :%edi)
-
+  (get-cmd-plist-x86--mov-reg-to-reg :%esi :%edi)
 
   (defun cmd-plist-to-bytes (in)
     (let ((acc)
