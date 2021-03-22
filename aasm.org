@@ -290,23 +290,10 @@ ModRM:
 - r/m[.B, 2:0] – register or memory operand when combined with mod field.
 - Addressing mode can include a following SIB byte {mod=00b,r/m=101b}
 
-*** mov_reg_to_reg_x86_64
+Для того чтобы переводить регистры в соответствующии им биты, нужны
+следующие процедуры:
 
-Prefix
-- RAX - если нужен
-- 0x66 - [TODO:gmm] префикс изменения размера операнда
-Opcode:
-- 89/r - MOV reg/mem64, reg64 - Move the contents of a 64-bit register to
-  a 64-bit destination register or memory operand
-- 8B/r - MOV reg64, reg/mem64 - Move the contents of a 64-bit register or
-  memory operand to a 64-bit destination register.
-
-ModR/M - [mod:7:6][reg:5:3][r/m:2:0]
-mod = 11b - register-direct-addressing mode
-reg: register
-mem: register
-
-#+NAME: mov_reg_to_reg_x86_64
+#+NAME: get_x86_reg
 #+BEGIN_SRC elisp
   (defmacro one-of-them (var &rest vals)
     (let ((acc))
@@ -374,39 +361,13 @@ mem: register
 
   ;; (int-to-binary-string 6)
 
-  (defun get-cmd-plist-x86--mov-reg-to-reg (from to)
-    (let ((reg1  (get-x86-reg from))
-          (reg2  (get-x86-reg to))
-          (rex   nil))
-      (cond ((and (plist-member reg1 :rex-w) (plist-member reg2 :rex-w))
-             (progn (setf (getf rex :w) t)
-                    (setf reg1 (getf reg1 :reg))
-                    (setf reg2 (getf reg2 :reg))))
-            ((null (or (plist-member reg1 :rex-w) (plist-member reg2 :rex-w)))
-             (progn (setf reg1 (getf reg1 :reg))
-                    (setf reg2 (getf reg2 :reg))))
-            (t (let ((errstr (format "rex-w mismatch %s %s" from to)))
-                 (error errstr))))
-      (values
-       `(:rex ,rex :op #x89 :mod #b11 :reg ,reg1 :mem ,reg2)
-       `(:rex ,rex :op #x8B :mod #b11 :reg ,reg2 :mem ,reg1))))
 
-  ;; (get-cmd-plist-x86--mov-reg-to-reg :%esi :%edi)
+#+END_SRC
 
-  (defun get-cmd-plist-x86--push-reg (source)
-  (let ((reg (getf (get-x86-reg source) :reg)))
-  (values `(:op #xA :reg ,reg))
-  ))
+А для сборки инструкций в конкретные байты - вот такая:
 
-  ;; (get-cmd-plist-x86--push-reg :%esi)
-
-  (defun get-cmd-plist-x86--pop-reg (source)
-  (let ((reg (getf (get-x86-reg source) :reg)))
-  (values `(:op #xB :reg ,reg))
-  ))
-
-  ;; (get-cmd-plist-x86--pop-reg :%esi)
-
+#+NAME: cmd_plist_to_bytes
+#+BEGIN_SRC elisp
   (defun cmd-plist-to-bytes (in)
     (let ((acc)
           (rex-plist (getf in :rex))
@@ -432,8 +393,79 @@ mem: register
   ;;          (cadr (get-cmd-plist-x86--mov-reg-to-reg :%esi :%edi))))
 #+END_SRC
 
-#+results: mov_reg_to_reg_x86_64
-: cmd-plist-to-bytes
+Также нам понадобится все это собрать
+
+#+NAME: abstract_assembler_cmds
+#+BEGIN_SRC elisp :noweb :tangle src/aasm.el :noweb tangle :exports code :padline no :comments none
+  <<get_x86_reg>>
+  <<mov_reg_to_reg_x86_64>>
+  <<push_and_pop_reg_x86_64>>
+#+END_SRC
+
+*** DONE mov_reg_to_reg_x86_64
+
+Prefix
+- RAX - если нужен
+- 0x66 - [TODO:gmm] префикс изменения размера операнда
+Opcode:
+- 89/r - MOV reg/mem64, reg64 - Move the contents of a 64-bit register to
+  a 64-bit destination register or memory operand
+- 8B/r - MOV reg64, reg/mem64 - Move the contents of a 64-bit register or
+  memory operand to a 64-bit destination register.
+
+ModR/M - [mod:7:6][reg:5:3][r/m:2:0]
+mod = 11b - register-direct-addressing mode
+reg: register
+mem: register
+
+#+NAME: mov_reg_to_reg_x86_64
+#+BEGIN_SRC elisp
+  (defun get-cmd-plist-x86--mov-reg-to-reg (from to)
+    (let ((reg1  (get-x86-reg from))
+          (reg2  (get-x86-reg to))
+          (rex   nil))
+      (cond ((and (plist-member reg1 :rex-w) (plist-member reg2 :rex-w))
+             (progn (setf (getf rex :w) t)
+                    (setf reg1 (getf reg1 :reg))
+                    (setf reg2 (getf reg2 :reg))))
+            ((null (or (plist-member reg1 :rex-w) (plist-member reg2 :rex-w)))
+             (progn (setf reg1 (getf reg1 :reg))
+                    (setf reg2 (getf reg2 :reg))))
+            (t (let ((errstr (format "rex-w mismatch %s %s" from to)))
+                 (error errstr))))
+      (values
+       `(:rex ,rex :op #x89 :mod #b11 :reg ,reg1 :mem ,reg2)
+       `(:rex ,rex :op #x8B :mod #b11 :reg ,reg2 :mem ,reg1))))
+
+  ;; (get-cmd-plist-x86--mov-reg-to-reg :%esi :%edi)
+
+
+#+END_SRC
+
+*** START mov_reg_to_reg_x86_64
+
+[TODO:gmm] Тут можно сделать описание того как устроена команда...
+
+#+NAME: push_and_pop_reg_x86_64
+#+BEGIN_SRC elisp
+  (defun get-cmd-plist-x86--push-reg (source)
+    (let ((reg (getf (get-x86-reg source) :reg)))
+      (values `(:op #xA :reg ,reg))))
+
+  ;; (get-cmd-plist-x86--push-reg :%esi)
+
+  (defun get-cmd-plist-x86--pop-reg (source)
+    (let ((reg (getf (get-x86-reg source) :reg)))
+      (values `(:op #xB :reg ,reg))))
+
+  ;; (get-cmd-plist-x86--pop-reg :%esi)
+
+  ;; TODO: не работает
+  (mapcar #'(lambda (in)
+              (format "%X" in))
+          (cmd-plist-to-bytes
+           (get-cmd-plist-x86--pop-reg :%esi))
+#+END_SRC
 
 *** TODO je_x86_64
 
