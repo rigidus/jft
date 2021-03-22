@@ -1,3 +1,5 @@
+
+
 #+STARTUP: showall indent hidestars
 
 AASM - Abstract Assembler
@@ -442,9 +444,8 @@ mem: register
 
 #+END_SRC
 
-*** START mov_reg_to_reg_x86_64
-
-[TODO:gmm] Тут можно сделать описание того как устроена команда...
+*** START push_and_pop_reg_x86_64
+[TODO:kvt] Тут можно сделать описание того как устроена команда...
 
 #+NAME: push_and_pop_reg_x86_64
 #+BEGIN_SRC elisp
