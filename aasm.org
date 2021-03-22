@@ -362,7 +362,6 @@ mem: register
 
   ;; (get-x86-reg :%rsi)
 
-
   (defun int-to-binary-string (i)
     "convert an integer into it's binary representation in string format"
     (let ((res ""))
@@ -394,6 +393,19 @@ mem: register
 
   ;; (get-cmd-plist-x86--mov-reg-to-reg :%esi :%edi)
 
+  (defun get-cmd-plist-x86--push-reg (source)
+  (let ((reg (getf (get-x86-reg source) :reg)))
+  (values `(:op #xA :reg ,reg))
+  ))
+
+  ;; (get-cmd-plist-x86--push-reg :%esi)
+
+  (defun get-cmd-plist-x86--pop-reg (source)
+  (let ((reg (getf (get-x86-reg source) :reg)))
+  (values `(:op #xB :reg ,reg))
+  ))
+
+  ;; (get-cmd-plist-x86--pop-reg :%esi)
 
   (defun cmd-plist-to-bytes (in)
     (let ((acc)
