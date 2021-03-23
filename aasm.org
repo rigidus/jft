@@ -292,11 +292,58 @@ ModRM:
 - r/m[.B, 2:0] – register or memory operand when combined with mod field.
 - Addressing mode can include a following SIB byte {mod=00b,r/m=101b}
 
+#+NAME: tbl_x86_reg_bits
+| al ax eax rax      | 000 | 0 |
+| cl cx ecx rcx      | 001 | 0 |
+| dl dx edx rdx      | 010 | 0 |
+| bl bx ebx rbx      | 011 | 0 |
+| ah sp esp rsp      | 100 | 0 |
+| ch bp ebp rbp      | 101 | 0 |
+| dh si esi rsi      | 110 | 0 |
+| bh di edi rdi      | 111 | 0 |
+| bpl                | 101 | 1 |
+| sil                | 110 | 1 |
+| dil                | 111 | 1 |
+| r8b r8w r8d r8     | 000 | 0 |
+| r9b r9w r9d r9     | 001 | 1 |
+| r10b r10w r10d r10 | 010 | 1 |
+| r11b r11w r11d r11 | 011 | 1 |
+| r12b r12w r12d r12 | 100 | 1 |
+| r13b r13w r13d r13 | 101 | 1 |
+| r14b r14w r14d r14 | 110 | 1 |
+| r15b r15w r15d r15 | 111 | 1 |
+
+#+NAME: gen_x86_reg_bits
+#+BEGIN_SRC emacs-lisp :var rt=tbl_x86_reg_bits
+  (let ((res))
+    (mapcar
+     (lambda (row)
+       (let ((regs
+              (mapcar (lambda (elt) (intern (format ":%%%s" elt)))
+                      (split-string (car row))))
+             (bits (cadr row))
+             (wide (caddr row)))
+         (push (format "    (when (one-of-them reg %s)"
+                       (mapconcat '(lambda (x) (format "%s" x))
+                                  regs " "))
+               res)
+         (push (format "      %s (list :reg #b%s :rex-w %s)))"
+                       "(return-from get-x86-blk" bits wide)
+               res)))
+     rt)
+    (push "   (error \"unknown-register\")" res)
+    (print (concat (format "(defun get-x86-reg-bits (reg) \n%s\n%s)"
+                           "  (block get-x86-blk"
+                           (mapconcat '(lambda (x) (format "%s" x))
+                                      (reverse res) "\n"))
+                   ")")))
+#+END_SRC
+
 Для того чтобы переводить регистры в соответствующии им биты, нужны
 следующие процедуры:
 
 #+NAME: get_x86_reg
-#+BEGIN_SRC elisp
+#+BEGIN_SRC elisp :noweb tangle
   (defmacro one-of-them (var &rest vals)
     (let ((acc))
       (dolist (elt vals)
@@ -306,50 +353,6 @@ ModRM:
       acc))
 
   ;; (macroexpand '(one-of-them reg :%al :%ax :%eax :%rax))
-
-  (defun get-x86-reg (reg)
-    "Переводит регистр в биты для mod/rm"
-    (let ((acc (block reg
-                 (when (one-of-them reg :%al :%ax :%eax :%rax)
-                   (return-from reg (list :reg #b000)))
-                 (when (one-of-them reg :%cl :%cx :%ecx :%rcx)
-                   (return-from reg (list :reg #b001)))
-                 (when (one-of-them reg :%dl :%dx :%edx :%edx)
-                   (return-from reg (list :reg #b010)))
-                 (when (one-of-them reg :%bl :%bx :%ebx :%rbx)
-                   (return-from reg (list :reg #b011)))
-                 (when (one-of-them reg :%ah :%sp :%esp :%rsp)
-                   (return-from reg (list :reg #b100)))
-                 (when (one-of-them reg :%ch :%bp :%ebp :%rbp :%bpl)
-                   (return-from reg (list :reg #b101)))
-                 (when (one-of-them reg :%dh :%si :%esi :%rsi :%sil)
-                   (return-from reg (list :reg #b110)))
-                 (when (one-of-them reg :%bh :%di :%edi :%rdi :%dil)
-                   (return-from reg (list :reg #b111)))
-                 (when (one-of-them reg :%r8b :%r8w :%r8d :%r8)
-                   (return-from reg (list :reg #b000)))
-                 (when (one-of-them reg :%r9b :%r9w :%r9d :%r9)
-                   (return-from reg (list :reg #b001 :rex-w 1)))
-                 (when (one-of-them reg :%r10b :%r10w :%r10d :%r10)
-                   (return-from reg (list :reg #b010 :rex-w 1)))
-                 (when (one-of-them reg :%r11b :%r11w :%r11d :%r11)
-                   (return-from reg (list :reg #b011 :rex-w 1)))
-                 (when (one-of-them reg :%r12b :%r12w :%r12d :%r12)
-                   (return-from reg (list :reg #b100 :rex-w 1)))
-                 (when (one-of-them reg :%r13b :%r13w :%r13d :%r13)
-                   (return-from reg (list :reg #b101 :rex-w 1)))
-                 (when (one-of-them reg :%r14b :%r14w :%r14d :%r14)
-                   (return-from reg (list :reg #b110 :rex-w 1)))
-                 (when (one-of-them reg :%r15b :%r15w :%r15d :%r15)
-                   (return-from reg (list :reg #b111 :rex-w 1)))
-                 (error "unknown-register"))))
-      (when (or (one-of-them reg :%bpl :%sil :%dil)
-                (and (null (getf acc :rex-w))
-                     (string= ":%r" (substring (symbol-name reg) 0 3))))
-        (setf (getf acc :rex-w) 1))
-      acc))
-
-  ;; (get-x86-reg :%rsi)
 
   (defun int-to-binary-string (i)
     "convert an integer into it's binary representation in string format"
@@ -362,8 +365,6 @@ ModRM:
       res))
 
   ;; (int-to-binary-string 6)
-
-
 #+END_SRC
 
 А для сборки инструкций в конкретные байты - вот такая:
@@ -398,8 +399,9 @@ ModRM:
 Также нам понадобится все это собрать
 
 #+NAME: abstract_assembler_cmds
-#+BEGIN_SRC elisp :noweb :tangle src/aasm.el :noweb tangle :exports code :padline no :comments none
+#+BEGIN_SRC elisp :noweb :tangle src/aasm.el :noweb tangle :exports code
   <<get_x86_reg>>
+  <<gen_x86_reg_bits(tbl_x86_reg_bits)>>
   <<mov_reg_to_reg_x86_64>>
   <<push_and_pop_reg_x86_64>>
 #+END_SRC
@@ -423,8 +425,8 @@ mem: register
 #+NAME: mov_reg_to_reg_x86_64
 #+BEGIN_SRC elisp
   (defun get-cmd-plist-x86--mov-reg-to-reg (from to)
-    (let ((reg1  (get-x86-reg from))
-          (reg2  (get-x86-reg to))
+    (let ((reg1  (get-x86-reg-bits from))
+          (reg2  (get-x86-reg-bits to))
           (rex   nil))
       (cond ((and (plist-member reg1 :rex-w) (plist-member reg2 :rex-w))
              (progn (setf (getf rex :w) t)
@@ -450,13 +452,13 @@ mem: register
 #+NAME: push_and_pop_reg_x86_64
 #+BEGIN_SRC elisp
   (defun get-cmd-plist-x86--push-reg (source)
-    (let ((reg (getf (get-x86-reg source) :reg)))
+    (let ((reg (getf (get-x86-reg-bits source) :reg)))
       (values `(:op #xA :reg ,reg))))
 
   ;; (get-cmd-plist-x86--push-reg :%esi)
 
   (defun get-cmd-plist-x86--pop-reg (source)
-    (let ((reg (getf (get-x86-reg source) :reg)))
+    (let ((reg (getf (get-x86-reg-bits source) :reg)))
       (values `(:op #xB :reg ,reg))))
 
   ;; (get-cmd-plist-x86--pop-reg :%esi)
