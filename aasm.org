@@ -1,3 +1,5 @@
+
+
 #+STARTUP: showall indent hidestars
 
 AASM - Abstract Assembler
@@ -244,6 +246,7 @@ _label
 
 * START Opcode Producer
 
+
 Каждая инструкция (почти) любого процессора имеет некоторый ~требуемый
 эффект~, ради которого мы ее применяем. Обычно эффект выражается в
 изменении регистров, памяти и флагов процессора.
@@ -267,6 +270,7 @@ _label
 [TODO:gmm] - Написать солвер
 
 ** x86_64 Producer
+
 
 Обычная инструкция на x86_64 имеет переменную длину (до 15 байт) и может
 состоять из нескольких компонентов, порядок которых определен:
@@ -336,6 +340,7 @@ ModRM:
                                       (reverse res) "\n"))
                    ")")))
 #+END_SRC
+
 
 Для того чтобы переводить регистры в соответствующии им биты, нужны
 следующие процедуры:
@@ -444,29 +449,37 @@ mem: register
 
 #+END_SRC
 
-*** START mov_reg_to_reg_x86_64
-
-[TODO:gmm] Тут можно сделать описание того как устроена команда...
+*** START push_and_pop_reg_x86_64
+[TODO:kvt] Тут можно сделать описание того как устроена команда...
 
 #+NAME: push_and_pop_reg_x86_64
 #+BEGIN_SRC elisp
-  (defun get-cmd-plist-x86--push-reg (source)
-    (let ((reg (getf (get-x86-reg-bits source) :reg)))
-      (values `(:op #xA :reg ,reg))))
+  (defun cmd-short-plist-to-bytes (in)
+    (let ((out)
+          (op (getf in :op))
+          (reg (getf in :reg))
+          )
+      (setf out (ash op 3))
+      (setf out (logior out reg))
+      out
+      ))
 
-  ;; (get-cmd-plist-x86--push-reg :%esi)
+    (defun get-cmd-plist-x86--push-reg (target)
+      (let ((reg (getf (get-x86-reg-bits target) :reg)))
+        (values `(:op #x0A :reg ,reg))))
 
-  (defun get-cmd-plist-x86--pop-reg (source)
-    (let ((reg (getf (get-x86-reg-bits source) :reg)))
-      (values `(:op #xB :reg ,reg))))
+    ;; (get-cmd-plist-x86--push-reg :%esi)
 
-  ;; (get-cmd-plist-x86--pop-reg :%esi)
+    (defun get-cmd-plist-x86--pop-reg (source)
+      (let ((reg (getf (get-x86-reg-bits source) :reg)))
+        (values `(:op #x0B :reg ,reg))))
 
-  ;; TODO: не работает
+    ;; (get-cmd-plist-x86--pop-reg :%esi)
+
   (mapcar #'(lambda (in)
               (format "%X" in))
-          (cmd-plist-to-bytes
-           (get-cmd-plist-x86--pop-reg :%esi))
+          (cmd-short-plist-to-bytes
+           (nth 0 (get-cmd-plist-x86--pop-reg :%esi)))
 #+END_SRC
 
 *** TODO je_x86_64
