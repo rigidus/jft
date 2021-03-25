@@ -1,5 +1,4 @@
-
-
+# -*- mode: org; fill-column: 60; -*-
 #+STARTUP: showall indent hidestars
 
 AASM - Abstract Assembler
@@ -246,7 +245,6 @@ _label
 
 * START Opcode Producer
 
-
 Каждая инструкция (почти) любого процессора имеет некоторый ~требуемый
 эффект~, ради которого мы ее применяем. Обычно эффект выражается в
 изменении регистров, памяти и флагов процессора.
@@ -295,25 +293,33 @@ ModRM:
 - Addressing mode can include a following SIB byte {mod=00b,r/m=101b}
 
 #+NAME: tbl_x86_reg_bits
-| al ax eax rax      | 000 | 0 |
-| cl cx ecx rcx      | 001 | 0 |
-| dl dx edx rdx      | 010 | 0 |
-| bl bx ebx rbx      | 011 | 0 |
-| ah sp esp rsp      | 100 | 0 |
-| ch bp ebp rbp      | 101 | 0 |
-| dh si esi rsi      | 110 | 0 |
-| bh di edi rdi      | 111 | 0 |
-| bpl                | 101 | 1 |
-| sil                | 110 | 1 |
-| dil                | 111 | 1 |
-| r8b r8w r8d r8     | 000 | 0 |
-| r9b r9w r9d r9     | 001 | 1 |
-| r10b r10w r10d r10 | 010 | 1 |
-| r11b r11w r11d r11 | 011 | 1 |
-| r12b r12w r12d r12 | 100 | 1 |
-| r13b r13w r13d r13 | 101 | 1 |
-| r14b r14w r14d r14 | 110 | 1 |
-| r15b r15w r15d r15 | 111 | 1 |
+| al ax eax          | 000 | nil |
+| cl cx ecx          | 001 | nil |
+| dl dx edx          | 010 | nil |
+| bl bx ebx          | 011 | nil |
+| ah sp esp          | 100 | nil |
+| ch bp ebp          | 101 | nil |
+| dh si esi          | 110 | nil |
+| bh di edi          | 111 | nil |
+| rax                | 000 |   1 |
+| rcx                | 001 |   1 |
+| rdx                | 010 |   1 |
+| rbx                | 011 |   1 |
+| rsp                | 100 |   1 |
+| rbp                | 101 |   1 |
+| rsi                | 110 |   1 |
+| rdi                | 111 |   1 |
+| bpl                | 101 |   1 |
+| sil                | 110 |   1 |
+| dil                | 111 |   1 |
+| r8b r8w r8d r8     | 000 | nil |
+| r9b r9w r9d r9     | 001 |   1 |
+| r10b r10w r10d r10 | 010 |   1 |
+| r11b r11w r11d r11 | 011 |   1 |
+| r12b r12w r12d r12 | 100 |   1 |
+| r13b r13w r13d r13 | 101 |   1 |
+| r14b r14w r14d r14 | 110 |   1 |
+| r15b r15w r15d r15 | 111 |   1 |
 
 #+NAME: gen_x86_reg_bits
 #+BEGIN_SRC emacs-lisp :var rt=tbl_x86_reg_bits
@@ -431,25 +437,30 @@ mem: register
     (let ((reg1  (get-x86-reg-bits from))
           (reg2  (get-x86-reg-bits to))
           (rex   nil))
-      (cond ((and (plist-member reg1 :rex-w) (plist-member reg2 :rex-w))
-             (progn (setf (getf rex :w) t)
-                    (setf reg1 (getf reg1 :reg))
-                    (setf reg2 (getf reg2 :reg))))
-            ((null (or (plist-member reg1 :rex-w) (plist-member reg2 :rex-w)))
+      (cond ((and (getf reg1 :rex-w)
+                  (getf reg2 :rex-w))
+             (progn
+               (setf (getf rex :w) t)
+               (setf reg1 (getf reg1 :reg))
+               (setf reg2 (getf reg2 :reg))))
+            ((and (null (getf reg1 :rex-w))
+                  (null (getf reg2 :rex-w)))
              (progn (setf reg1 (getf reg1 :reg))
                     (setf reg2 (getf reg2 :reg))))
             (t (let ((errstr (format "rex-w mismatch %s %s" from to)))
-                 (error errstr))))
+                 (print errstr)
+                 (error "ERR: rex-w mismatch"))))
       (values
        `(:rex ,rex :op #x89 :mod #b11 :reg ,reg1 :mem ,reg2)
        `(:rex ,rex :op #x8B :mod #b11 :reg ,reg2 :mem ,reg1))))
 
   ;; (get-cmd-plist-x86--mov-reg-to-reg :%esi :%edi)
-
+  ;; (get-cmd-plist-x86--mov-reg-to-reg :%rsi :%rdi)
 
 #+END_SRC
 
 *** START push_and_pop_reg_x86_64
+
 [TODO:kvt] Тут можно сделать описание того как устроена команда...
 
 #+NAME: push_and_pop_reg_x86_64
@@ -457,29 +468,28 @@ mem: register
   (defun cmd-short-plist-to-bytes (in)
     (let ((out)
           (op (getf in :op))
-          (reg (getf in :reg))
-          )
+          (reg (getf in :reg)))
       (setf out (ash op 3))
       (setf out (logior out reg))
-      out
-      ))
+      out))
 
-    (defun get-cmd-plist-x86--push-reg (target)
-      (let ((reg (getf (get-x86-reg-bits target) :reg)))
-        (values `(:op #x0A :reg ,reg))))
+  (defun get-cmd-plist-x86--push-reg (target)
+    (let ((reg (getf (get-x86-reg-bits target) :reg)))
+      (values `(:op #x0A :reg ,reg))))
 
-    ;; (get-cmd-plist-x86--push-reg :%esi)
+  ;; (get-cmd-plist-x86--push-reg :%esi)
 
-    (defun get-cmd-plist-x86--pop-reg (source)
-      (let ((reg (getf (get-x86-reg-bits source) :reg)))
-        (values `(:op #x0B :reg ,reg))))
+  (defun get-cmd-plist-x86--pop-reg (source)
+    (let ((reg (getf (get-x86-reg-bits source) :reg)))
+      (values `(:op #x0B :reg ,reg))))
 
-    ;; (get-cmd-plist-x86--pop-reg :%esi)
+  ;; (get-cmd-plist-x86--pop-reg :%esi)
 
   (mapcar #'(lambda (in)
               (format "%X" in))
           (cmd-short-plist-to-bytes
            (nth 0 (get-cmd-plist-x86--pop-reg :%esi)))
+
 #+END_SRC
 
 *** TODO je_x86_64
