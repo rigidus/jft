@@ -461,7 +461,9 @@ mem: register
 
 *** START push_and_pop_reg_x86_64
 
-[TODO:kvt] Тут можно сделать описание того как устроена команда...
+For the first 8 registers push/pop reg is a 1 byte command. Byte value is obtained
+from the expression op + reg where op is 0x50 for push and
+0x58 for pop. Reg value can be found in the table above.
 
 #+NAME: push_and_pop_reg_x86_64
 #+BEGIN_SRC elisp
