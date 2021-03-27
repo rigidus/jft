@@ -466,30 +466,25 @@ mem: register
 #+NAME: push_and_pop_reg_x86_64
 #+BEGIN_SRC elisp
   (defun cmd-short-plist-to-bytes (in)
-    (let ((out)
-          (op (getf in :op))
-          (reg (getf in :reg)))
-      (setf out (ash op 3))
-      (setf out (logior out reg))
-      out))
+    (list (logior (ash (getf in :op) 3)
+                  (getf in :reg))))
 
-  (defun get-cmd-plist-x86--push-reg (target)
-    (let ((reg (getf (get-x86-reg-bits target) :reg)))
+  (defun get-cmd-plist-x86--push-reg (source)
+    (let ((reg (getf (get-x86-reg-bits source) :reg)))
       (values `(:op #x0A :reg ,reg))))
 
   ;; (get-cmd-plist-x86--push-reg :%esi)
 
-  (defun get-cmd-plist-x86--pop-reg (source)
-    (let ((reg (getf (get-x86-reg-bits source) :reg)))
+  (defun get-cmd-plist-x86--pop-reg (target)
+    (let ((reg (getf (get-x86-reg-bits target) :reg)))
       (values `(:op #x0B :reg ,reg))))
 
   ;; (get-cmd-plist-x86--pop-reg :%esi)
 
-  (mapcar #'(lambda (in)
-              (format "%X" in))
-          (cmd-short-plist-to-bytes
-           (nth 0 (get-cmd-plist-x86--pop-reg :%esi)))
-
+  ;; (mapcar #'(lambda (in)
+  ;;             (format "%X" in))
+  ;;         (cmd-short-plist-to-bytes
+  ;;          (car (get-cmd-plist-x86--pop-reg :%esi))))
 #+END_SRC
 
 *** TODO je_x86_64
