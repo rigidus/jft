@@ -283,11 +283,23 @@ _label
 --skiped:https://www.youtube.com/watch?v=CUAXCeRjw3c:--
 
 - Prefixes (REX, VEX : https://habr.com/ru/company/intel/blog/200598/)
-  Использование REX позволяет расширить набор регистров r8-r15
+  Использование REX позволяет расширить набор регистров
+  r8-r15
+
+- Links:
+  - http://www.c-jump.com/CIS77/CPU/x86/X77_0060_mod_reg_r_m_byte.htm
+  - https://stackoverflow.com/questions/15511482/x64-instruction-encoding-and-the-modrm-byte
+  - https://sandpile.org/x86/opc_rm.htm
+
 ModRM:
 - mod[7:6] - 4 метода адресации
-  -  11b - register-direct
-  - !11b - other addressing
+  - 00b Register indirect addressing mode or SIB with no
+    displacement (when R/M=100b) or Displacement only
+    addressing mode (when R/M=101b).
+  - 01b One-byte signed displacement follows addressing mode
+    byte(s).
+  - 10b Four-byte signed displacement follows addressing mode byte(s).
+  - 11b Register addressing mode.
 - reg[.R, 5:3] - register-based operand or extend operation encoding
 - r/m[.B, 2:0] – register or memory operand when combined with mod field.
 - Addressing mode can include a following SIB byte {mod=00b,r/m=101b}
@@ -459,7 +471,7 @@ mem: register
 
 #+END_SRC
 
-*** START push_and_pop_reg_x86_64
+*** DONE push_and_pop_reg_x86_64
 
 For the first 8 registers push/pop reg is a 1 byte command. Byte value is obtained
 from the expression op + reg where op is 0x50 for push and
@@ -487,6 +499,11 @@ from the expression op + reg where op is 0x50 for push and
   ;;             (format "%X" in))
   ;;         (cmd-short-plist-to-bytes
   ;;          (car (get-cmd-plist-x86--pop-reg :%esi))))
+#+END_SRC
+
+*** TODO jmp_reg_x86_64
+#+NAME:
+#+BEGIN_SRC
 #+END_SRC
 
 *** TODO je_x86_64
