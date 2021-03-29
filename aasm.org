@@ -502,8 +502,27 @@ from the expression op + reg where op is 0x50 for push and
 #+END_SRC
 
 *** TODO jmp_reg_x86_64
-#+NAME:
-#+BEGIN_SRC
+
+[TODO:kvt] description
+
+#+NAME: jmp_reg_x86_64
+#+BEGIN_SRC elisp
+
+  (defun get-cmd-plist-x86--jmp-reg-direct (target)
+    (let ((mem (getf (get-x86-reg-bits target) :reg)))
+      (values `(:op #xFF :mod 3 :reg 4 :mem ,mem))))
+
+  (defun get-cmd-plist-x86--jmp-reg-indirect (target)
+    (let ((mem (getf (get-x86-reg-bits target) :reg)))
+      (values `(:op #xFF :mod 0 :reg 4 :mem ,mem))))
+
+  ;; (get-cmd-plist-x86--jmp-reg-direct :%eax)
+
+  ;; (mapcar #'(lambda (in)
+  ;;             (format "%X" in))
+  ;;         (cmd-plist-to-bytes
+  ;;          (car (get-cmd-plist-x86--jmp-reg-indirect :%eax))))
+
 #+END_SRC
 
 *** TODO je_x86_64
