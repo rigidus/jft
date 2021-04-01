@@ -3211,6 +3211,113 @@ SYSCALL0, SYSCALL1, SYSCALL2, SYSCALL3 делают стандартный
       .space INITIAL_DATA_SEGMENT_SIZE
 #+END_SRC
 
+* Tangling
+
+#+NAME: macros
+#+BEGIN_SRC asm :noweb yes :exports code :padline no :comments none
+  <<macro_next>>
+
+  <<macro_pushrsp>>
+
+  <<macro_poprsp>>
+
+  <<macro_defword>>
+
+  <<macro_defcode>>
+
+  <<macro_defvar>>
+
+  <<macro_defconst>>
+#+END_SRC
+
+#+NAME: assembly
+#+BEGIN_SRC asm :tangle src/mfm.s :noweb yes :exports code :padline no :comments none
+  <<flags>>
+
+  <<macros>>
+
+  <<built_in_vars>>
+
+  <<built_in_constants>>
+
+  <<asm_docol>>
+
+  <<words_for_retstack>>
+
+  <<simple_primitives>>
+
+  <<mod>>
+
+  <<comparison>>
+
+  <<argc>>
+
+  <<argv>>
+
+  <<env>>
+
+  <<exit>>
+
+  <<store>>
+
+  <<char_store>>
+
+  <<data_stack_words>>
+
+  <<word_key>>
+
+  <<word_emit>>
+
+  <<word_word>>
+
+  <<word_find>>
+
+  <<word_tcfa>>
+
+  <<word_tdfa>>
+
+  <<word_number>>
+
+  <<word_lit>>
+
+  <<word_tell>>
+
+  <<word_create>>
+
+  <<word_comma>>
+
+  <<word_rbrac>>
+
+  <<word_colon>>
+
+  <<word_semicolon>>
+
+  <<word_immediate>>
+
+  <<word_hidden>>
+
+  <<word_tick>>
+
+  <<word_interpret>>
+
+  <<word_branch>>
+
+  <<word_quit>>
+
+  <<word_char>>
+
+  <<word_execute>>
+
+  <<dodoes>>
+
+  <<word_syscalls>>
+
+  <<asm_entry>>
+
+  <<sys_ret_stack_and_input_buffer>>
+
+#+END_SRC
+
 * Macroses
 :PROPERTIES:
 :VISIBILITY: children
