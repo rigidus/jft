@@ -506,6 +506,19 @@ from the expression op + reg where op is 0x50 for push and
 
 [TODO:kvt] description
 
+https://www.felixcloutier.com/x86/jmp
+
+FF /4
+
+/4 means that field reg in mod-reg-rm contains 4 (100b)
+mod contains 00b for indirect jumps and 11b for direct jumps
+FF E0 ; jmp eax - E0 is 11 100 000 in binary
+                        ^  ^   ^
+                        |  |   +- 000 is eax
+                        |  +- 100 is 4 from /4
+                        +- 11 is direct addressing
+FF 20 ; jmp [eax] - indirect jump
+
 #+NAME: jmp_reg_x86_64
 #+BEGIN_SRC elisp
 
