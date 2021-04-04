@@ -120,6 +120,84 @@ assembler, на который я опираюсь и иметь:
 
 #+NAME: p_aasm
 #+BEGIN_SRC elisp :var arg=min_aasm :results value list pp
+  (setq *asmp* (make-hash-table :test 'eq))
+
+  (hash-table-count *asmp*)
+
+  (setf (gethash :comment-line *asmp*)
+        (lambda (param)
+          (replace-regexp-in-string "^#\\(.*\\)"
+                                    (lambda (in)
+                                      (return-from ram `(comment-line ,in)))
+                                    param)))
+
+  (setf (gethash :mov-reg-to-reg *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match (concat "^mov\s*" reg "\s*,\s*" reg "\\(.*\\)") param)
+                 (return-from ram `(mov_reg_to_reg :from  ,(match-string 1 param)
+                                                   :to    ,(match-string 2 param)
+                                                   :rest  ,(match-string 3 param)
+                                                   :ident ,ident))))))
+
+  (setf (gethash :mov-reg-to-mem *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match (concat "^mov\s*" reg "\s*,\s*(" reg ")\\(.*\\)") param)
+                 (return-from ram `(mov_reg_to_mem :from  ,(match-string 1 param)
+                                                   :to    ,(match-string 2 param)
+                                                   :rest  ,(match-string 3 param)
+                                                   :ident ,ident))))))
+
+  (setf (gethash :jmp-reg *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match (concat "^jmp\s*" reg "\\(.*\\)?$") param)
+                 (return-from ram `(jmp_reg
+                                    :to    ,(car (split-string (match-string 1 param)))
+                                    :rest  ,(match-string 2 param)
+                                    :ident ,ident))))))
+
+  (setf (gethash :jmp-label *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match
+                  (concat "^jmp\s*" "\\([_a-zA-z]+\\)" "\s?\\(.*\\)?$") param)
+                 (return-from ram  `(jmp_label
+                                     :to    ,(car (split-string (match-string 1 param)))
+                                     :rest  ,(match-string 2 param)
+                                     :ident ,ident))))))
+
+  (setf (gethash :label *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match
+                  (concat "^\\([_a-zA-Z]+\\):" "\s?\\(.*\\)?$") param)
+                 (return-from ram `(label
+                                    :name  ,(car (split-string (match-string 1 param)))
+                                    :rest  ,(match-string 2 param)
+                                    :ident ,ident))))))
+
+  (setf (gethash :macro *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match
+                  (concat "^\\.macro\s*" "\\([_a-zA-z]+\\)" "\s?\\(.*\\)?$") param)
+                 (return-from ram `(macro
+                                    :name  ,(car (split-string (match-string 1 param)))
+                                    :rest  ,(match-string 2 param)
+                                    :ident ,ident))))))
+
+  (setf (gethash :endm *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match
+                  (concat "^\\.endm\s*" "\s?\\(.*\\)?$") param)
+                 (return-from ram `(endm
+                                    :rest  ,(match-string 2 param)
+                                    :ident ,ident))))))
+
+
   (defun p-aasm (param)
     (block ram
       (if (or (string-equal "" param) (string-equal "" (string-trim-left param)))
@@ -129,48 +207,10 @@ assembler, на который я опираюсь и иметь:
              (reg-size  4)
              (reg        "\\(%[a-zA-Z]\\{3\\}\\)")
              (case-fold-search nil))
-        (replace-regexp-in-string "^#\\(.*\\)" ;; comment-line
-                                  (lambda (in)
-                                    (return-from ram `(comment-line ,in)))
-                                  param)
-        (save-match-data ;; mov reg to reg
-          (and (string-match (concat "^mov\s*" reg "\s*,\s*" reg "\\(.*\\)") param)
-               (return-from ram `(mov_reg_to_reg :from  ,(match-string 1 param)
-                                                 :to    ,(match-string 2 param)
-                                                 :rest  ,(match-string 3 param)
-                                                 :ident ,ident))))
-        (save-match-data ;; mov mem to reg
-          (and (string-match (concat "^mov\s*(" reg ")\s*,\s*" reg "\\(.*\\)") param)
-               (return-from ram `(mov_mem_to_reg :from  ,(match-string 1 param)
-                                                 :to    ,(match-string 2 param)
-                                                 :rest  ,(match-string 3 param)
-                                                 :ident ,ident))))
-        (save-match-data ;; mov reg to mem
-          (and (string-match (concat "^mov\s*" reg "\s*,\s*(" reg ")\\(.*\\)") param)
-               (return-from ram `(mov_reg_to_mem :from  ,(match-string 1 param)
-                                                 :to    ,(match-string 2 param)
-                                                 :rest  ,(match-string 3 param)
-                                                 :ident ,ident))))
-        (save-match-data ;; jmp reg
-          (and (string-match (concat "^jmp\s*" reg "\\(.*\\)?$") param)
-               (return-from ram `(jmp_reg
-                                  :to    ,(car (split-string (match-string 1 param)))
-                                  :rest  ,(match-string 2 param)
-                                  :ident ,ident))))
-        (save-match-data ;; jmp label
-          (and (string-match
-                (concat "^jmp\s*" "\\([_a-zA-z]+\\)" "\s?\\(.*\\)?$") param)
-               (return-from ram  `(jmp_label
-                                   :to    ,(car (split-string (match-string 1 param)))
-                                   :rest  ,(match-string 2 param)
-                                   :ident ,ident))))
-        (save-match-data ;; label
-          (and (string-match
-                (concat "^\\([_a-zA-Z]+\\):" "\s?\\(.*\\)?$") param)
-               (return-from ram `(label
-                                  :name  ,(car (split-string (match-string 1 param)))
-                                  :rest  ,(match-string 2 param)
-                                  :ident ,ident)))))))
+        (maphash (lambda (key val)
+                   (funcall val param))
+                 ,*asmp*))))
+
 
   (mapcar #'(lambda (in) (princ "\n") (prin1 in))
           (mapcar #'p-aasm
@@ -184,8 +224,7 @@ assembler, на который я опираюсь и иметь:
 - (comment-line "# COMMENT with indentation")
 - (mov_reg_to_reg :from "%IPR" :to "%ACR" :rest "     # mov reg to reg" :ident 4)
 - (mov_reg_to_reg :from "%IPR" :to "%ACR" :rest "" :ident 4)
-- (mov_mem_to_reg :from "%IPR" :to "%ACR" :rest "   # mov mem to reg" :ident 4)
-- (mov_mem_to_reg :from "%IPR" :to "%ACR" :rest "" :ident 4)
+- nil nil
 - (mov_reg_to_mem :from "%IPR" :to "%ACR" :rest "   # mov reg to mem" :ident 4)
 - (mov_reg_to_mem :from "%IPR" :to "%ACR" :rest "" :ident 4)
 - (jmp_reg :to "%IRP" :rest "           # jmp reg" :ident 4)
@@ -527,6 +566,34 @@ from the expression op + reg where op is 0x50 for push and
 #+END_SRC
 
 *** TODO je_x86_64
+
+* Macro processing
+
+Мы часто будем использовать макросы, такие как NEXT:
+
+#+NAME: macro_next
+#+BEGIN_EXAMPLE asm
+  .macro NEXT
+      mov     %IRP, %ACR
+      add     $_WZ_, %IRP
+      jmp     *(%ACR)
+  .endm
+#+END_EXAMPLE
+
+#+NAME:
+#+BEGIN_SRC elisp :var arg=macro_next :results value list pp
+  (mapcar #'(lambda (in) (princ "\n") (prin1 in))
+          (mapcar #'p-aasm
+                  (split-string arg "\n" nil nil)))
+#+END_SRC
+
+#+results:
+: - ((macro :name "NEXT" :rest "" :ident 0)
+: - (mov_reg_to_reg :from "%IRP" :to "%ACR" :rest "" :ident 4)
+: - nil nil
+: - (endm :rest nil :ident 0)
+: - (:empty))
+
 
 * TODO Elf maker
 * TODO Disassembler
