@@ -127,6 +127,7 @@ assembler, на который я опираюсь и иметь:
   <<parse_comment_line>>
   <<parse_mov_reg_to_reg>>
   <<parse_mov_reg_to_mem>>
+  <<parse_add_const_to_reg>>
   <<parse_jmp_reg>>
   <<parse_jmp_label>>
   <<parse_label>>
@@ -146,10 +147,14 @@ assembler, на который я опираюсь и иметь:
                    (funcall val param))
                  ,*asmp*))))
 
+  ;; (mapcar #'(lambda (in) (princ "\n") (prin1 in))
+  ;;         (mapcar #'p-aasm
+  ;;                 (split-string arg "\n" nil nil)))
 
-  (mapcar #'(lambda (in) (princ "\n") (prin1 in))
-          (mapcar #'p-aasm
-                  (split-string arg "\n" nil nil)))
+  ;; (let ((arg "      add     $_WZ_, %IRP"))
+  ;;   (mapcar #'(lambda (in) (princ "\n") (prin1 in))
+  ;;           (mapcar #'p-aasm
+  ;;                   (split-string arg "\n" nil nil))))
 #+END_SRC
 
 #+results: p_aasm
@@ -209,6 +214,20 @@ assembler, на который я опираюсь и иметь:
                                                    :to    ,(match-string 2 param)
                                                    :rest  ,(match-string 3 param)
                                                    :ident ,ident))))))
+#+END_SRC
+
+** Add constant to register
+
+#+NAME: parse_add_const_to_reg
+#+BEGIN_SRC elisp
+  (setf (gethash :add-const-to-reg *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match (concat "^add\s+\\($[_A-Za-z]*\\)\s?,\s?" reg) param)
+                 (return-from ram `(add_const_to_reg :const ,(match-string 1 param)
+                                                     :to    ,(match-string 2 param)
+                                                     :rest  ,(match-string 3 param)
+                                                     :ident ,ident))))))
 #+END_SRC
 
 ** Jump register
