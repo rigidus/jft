@@ -119,84 +119,19 @@ assembler, на который я опираюсь и иметь:
 ассемблере", чтобы получить из него список S-выражений
 
 #+NAME: p_aasm
-#+BEGIN_SRC elisp :var arg=min_aasm :results value list pp
+#+BEGIN_SRC elisp :noweb yes :tangle src/parse.el
   (setq *asmp* (make-hash-table :test 'eq))
 
   (hash-table-count *asmp*)
 
-  (setf (gethash :comment-line *asmp*)
-        (lambda (param)
-          (replace-regexp-in-string "^#\\(.*\\)"
-                                    (lambda (in)
-                                      (return-from ram `(comment-line ,in)))
-                                    param)))
-
-  (setf (gethash :mov-reg-to-reg *asmp*)
-        (lambda (param)
-          (save-match-data
-            (and (string-match (concat "^mov\s*" reg "\s*,\s*" reg "\\(.*\\)") param)
-                 (return-from ram `(mov_reg_to_reg :from  ,(match-string 1 param)
-                                                   :to    ,(match-string 2 param)
-                                                   :rest  ,(match-string 3 param)
-                                                   :ident ,ident))))))
-
-  (setf (gethash :mov-reg-to-mem *asmp*)
-        (lambda (param)
-          (save-match-data
-            (and (string-match (concat "^mov\s*" reg "\s*,\s*(" reg ")\\(.*\\)") param)
-                 (return-from ram `(mov_reg_to_mem :from  ,(match-string 1 param)
-                                                   :to    ,(match-string 2 param)
-                                                   :rest  ,(match-string 3 param)
-                                                   :ident ,ident))))))
-
-  (setf (gethash :jmp-reg *asmp*)
-        (lambda (param)
-          (save-match-data
-            (and (string-match (concat "^jmp\s*" reg "\\(.*\\)?$") param)
-                 (return-from ram `(jmp_reg
-                                    :to    ,(car (split-string (match-string 1 param)))
-                                    :rest  ,(match-string 2 param)
-                                    :ident ,ident))))))
-
-  (setf (gethash :jmp-label *asmp*)
-        (lambda (param)
-          (save-match-data
-            (and (string-match
-                  (concat "^jmp\s*" "\\([_a-zA-z]+\\)" "\s?\\(.*\\)?$") param)
-                 (return-from ram  `(jmp_label
-                                     :to    ,(car (split-string (match-string 1 param)))
-                                     :rest  ,(match-string 2 param)
-                                     :ident ,ident))))))
-
-  (setf (gethash :label *asmp*)
-        (lambda (param)
-          (save-match-data
-            (and (string-match
-                  (concat "^\\([_a-zA-Z]+\\):" "\s?\\(.*\\)?$") param)
-                 (return-from ram `(label
-                                    :name  ,(car (split-string (match-string 1 param)))
-                                    :rest  ,(match-string 2 param)
-                                    :ident ,ident))))))
-
-  (setf (gethash :macro *asmp*)
-        (lambda (param)
-          (save-match-data
-            (and (string-match
-                  (concat "^\\.macro\s*" "\\([_a-zA-z]+\\)" "\s?\\(.*\\)?$") param)
-                 (return-from ram `(macro
-                                    :name  ,(car (split-string (match-string 1 param)))
-                                    :rest  ,(match-string 2 param)
-                                    :ident ,ident))))))
-
-  (setf (gethash :endm *asmp*)
-        (lambda (param)
-          (save-match-data
-            (and (string-match
-                  (concat "^\\.endm\s*" "\s?\\(.*\\)?$") param)
-                 (return-from ram `(endm
-                                    :rest  ,(match-string 2 param)
-                                    :ident ,ident))))))
-
+  <<parse_comment_line>>
+  <<parse_mov_reg_to_reg>>
+  <<parse_mov_reg_to_mem>>
+  <<parse_jmp_reg>>
+  <<parse_jmp_label>>
+  <<parse_label>>
+  <<parse_macro>>
+  <<parse_endm>>
 
   (defun p-aasm (param)
     (block ram
@@ -235,6 +170,119 @@ assembler, на который я опираюсь и иметь:
 - (label :name "_label" :rest "" :ident 0)
 - (:empty))
 #+end_example
+
+** Comment line
+
+#+NAME: parse_comment_line
+#+BEGIN_SRC elisp
+  (setf (gethash :comment-line *asmp*)
+        (lambda (param)
+          (replace-regexp-in-string "^#\\(.*\\)"
+                                    (lambda (in)
+                                      (return-from ram `(comment-line ,in)))
+                                    param)))
+#+END_SRC
+
+** Mov register to register
+
+#+NAME: parse_mov_reg_to_reg
+#+BEGIN_SRC elisp
+  (setf (gethash :mov-reg-to-reg *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match (concat "^mov\s*" reg "\s*,\s*" reg "\\(.*\\)") param)
+                 (return-from ram `(mov_reg_to_reg :from  ,(match-string 1 param)
+                                                   :to    ,(match-string 2 param)
+                                                   :rest  ,(match-string 3 param)
+                                                   :ident ,ident))))))
+#+END_SRC
+
+** Mov register to memory
+
+#+NAME: parse_mov_reg_to_mem
+#+BEGIN_SRC elisp
+  (setf (gethash :mov-reg-to-mem *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match (concat "^mov\s*" reg "\s*,\s*(" reg ")\\(.*\\)") param)
+                 (return-from ram `(mov_reg_to_mem :from  ,(match-string 1 param)
+                                                   :to    ,(match-string 2 param)
+                                                   :rest  ,(match-string 3 param)
+                                                   :ident ,ident))))))
+#+END_SRC
+
+** Jump register
+
+#+NAME: parse_jmp_reg
+#+BEGIN_SRC elisp
+  (setf (gethash :jmp-reg *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match (concat "^jmp\s*" reg "\\(.*\\)?$") param)
+                 (return-from ram `(jmp_reg
+                                    :to    ,(car (split-string (match-string 1 param)))
+                                    :rest  ,(match-string 2 param)
+                                    :ident ,ident))))))
+#+END_SRC
+
+** Jump label
+
+#+NAME: parse_jmp_label
+#+BEGIN_SRC elisp
+  (setf (gethash :jmp-label *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match
+                  (concat "^jmp\s*" "\\([_a-zA-z]+\\)" "\s?\\(.*\\)?$") param)
+                 (return-from ram  `(jmp_label
+                                     :to    ,(car (split-string (match-string 1 param)))
+                                     :rest  ,(match-string 2 param)
+                                     :ident ,ident))))))
+#+END_SRC
+
+** Label
+
+#+NAME: parse_label
+#+BEGIN_SRC elisp
+  (setf (gethash :label *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match
+                  (concat "^\\([_a-zA-Z]+\\):" "\s?\\(.*\\)?$") param)
+                 (return-from ram `(label
+                                    :name  ,(car (split-string (match-string 1 param)))
+                                    :rest  ,(match-string 2 param)
+                                    :ident ,ident))))))
+#+END_SRC
+
+** Macro
+
+#+NAME: parse_macro
+#+BEGIN_SRC elisp
+  (setf (gethash :macro *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match
+                  (concat "^\\.macro\s*" "\\([_a-zA-z]+\\)" "\s?\\(.*\\)?$") param)
+                 (return-from ram `(macro
+                                    :name  ,(car (split-string (match-string 1 param)))
+                                    :rest  ,(match-string 2 param)
+                                    :ident ,ident))))))
+#+END_SRC
+
+** Endm
+
+#+NAME: parse_endm
+#+BEGIN_SRC elisp
+  (setf (gethash :endm *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match
+                  (concat "^\\.endm\s*" "\s?\\(.*\\)?$") param)
+                 (return-from ram `(endm
+                                    :rest  ,(match-string 2 param)
+                                    :ident ,ident))))))
+#+END_SRC
 
 * GNU Assembler Producer
 
@@ -579,8 +627,11 @@ FF 20 ; jmp [eax] - indirect jump
 #+END_SRC
 
 *** TODO je_x86_64
+* START Constant processing
 
-* Macro processing
+
+
+* START Macro processing
 
 Мы часто будем использовать макросы, такие как NEXT:
 
