@@ -125,6 +125,7 @@ assembler, на который я опираюсь и иметь:
   (hash-table-count *asmp*)
 
   <<parse_comment_line>>
+  <<parse_const>>
   <<parse_mov_reg_to_reg>>
   <<parse_mov_reg_to_mem>>
   <<parse_add_const_to_reg>>
@@ -158,25 +159,6 @@ assembler, на который я опираюсь и иметь:
   ;;                   (split-string arg "\n" nil nil))))
 #+END_SRC
 
-#+results: p_aasm
-#+begin_example
-- ((:empty)
-- (comment-line "# first COMMENT")
-- (comment-line "# COMMENT with indentation")
-- (mov_reg_to_reg :from "%IPR" :to "%ACR" :rest "     # mov reg to reg" :ident 4)
-- (mov_reg_to_reg :from "%IPR" :to "%ACR" :rest "" :ident 4)
-- nil nil
-- (mov_reg_to_mem :from "%IPR" :to "%ACR" :rest "   # mov reg to mem" :ident 4)
-- (mov_reg_to_mem :from "%IPR" :to "%ACR" :rest "" :ident 4)
-- (jmp_reg :to "%IRP" :rest "           # jmp reg" :ident 4)
-- (jmp_reg :to "%IRP" :rest "" :ident 4)
-- (jmp_label :to "_label" :rest "        # jmp label" :ident 4)
-- (jmp_label :to "_label" :rest "" :ident 4)
-- (label :name "_label_with_comment" :rest "      # this is label" :ident 0)
-- (label :name "_label" :rest "" :ident 0)
-- (:empty))
-#+end_example
-
 ** Comment line
 
 #+NAME: parse_comment_line
@@ -187,6 +169,27 @@ assembler, на который я опираюсь и иметь:
                                     (lambda (in)
                                       (return-from ram `(comment-line ,in)))
                                     param)))
+#+END_SRC
+
+** Constants
+
+.set someconst, someval
+
+#+NAME: parse_const
+#+BEGIN_SRC elisp
+  (setf (gethash :const *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match "^\\.set\s+\\([_a-zA-Z]*\\)\s?,\s?\\([_a-zA-Z0-9]*\\)" param)
+                 (return-from ram `(mov_reg_to_reg :const ,(match-string 1 param)
+                                                   :val   ,(match-string 2 param)
+                                                   :rest  ,(match-string 3 param)
+                                                   :ident ,ident))))))
+
+  ;; (let ((arg ".set F_LENMASK, 0x1f    # length mask"))
+  ;;   (mapcar #'(lambda (in) (princ "\n") (prin1 in))
+  ;;           (mapcar #'p-aasm
+  ;;                   (split-string arg "\n" nil nil))))
 #+END_SRC
 
 ** Mov register to register
@@ -661,10 +664,6 @@ FF 20 ; jmp [eax] - indirect jump
 #+END_SRC
 
 *** TODO je_x86_64
-* START Constant processing
-
-.set someconst, someval
-
 * START Macro processing
 
 Мы часто будем использовать макросы, такие как NEXT:
