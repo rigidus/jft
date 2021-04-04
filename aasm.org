@@ -57,12 +57,12 @@ JIT-компиляцию.
 
 #+NAME: tbl_regs
 | %ACR | %rax | Accumilator Register (A)           |
-| %BCR | %rbxx| Secondary Accumulator Register (B) |
+| %BCR | %rbx | Secondary Accumulator Register (B) |
 | %CCR | %rcx | Third Accumulator Register (C)     |
 | %DCR | %rdx | Fourth Accumulator Register (D)    |
 | %IPR | %rsi | Instruction Pointer Register       |
 | %RSR | %rbp | Return Stack Register              |
-| %DSR | %rspp| Data Stack Register                |
+| %DSR | %rsp | Data Stack Register                |
 
 Я буду использовать эти регистры в своем коде "абстрактного
 ассемблера", а при компиляции они будут сопоставляться с
