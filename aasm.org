@@ -113,7 +113,7 @@ assembler, на который я опираюсь и иметь:
   _label:
 #+END_EXAMPLE
 
-* Parsing of Abstract Assembler Code
+* START Parsing of Abstract Assembler Code
 
 Этот кусок кода разбирает минимальный сниппет кода на "абстрактном
 ассемблере", чтобы получить из него список S-выражений
@@ -181,10 +181,10 @@ assembler, на который я опираюсь и иметь:
         (lambda (param)
           (save-match-data
             (and (string-match "^\\.set\s+\\([_a-zA-Z]*\\)\s?,\s?\\([_a-zA-Z0-9]*\\)" param)
-                 (return-from ram `(mov_reg_to_reg :const ,(match-string 1 param)
-                                                   :val   ,(match-string 2 param)
-                                                   :rest  ,(match-string 3 param)
-                                                   :ident ,ident))))))
+                 (return-from ram `(set-const :const ,(match-string 1 param)
+                                              :val   ,(match-string 2 param)
+                                              :rest  ,(match-string 3 param)
+                                              :ident ,ident))))))
 
   ;; (let ((arg ".set F_LENMASK, 0x1f    # length mask"))
   ;;   (mapcar #'(lambda (in) (princ "\n") (prin1 in))
@@ -321,51 +321,97 @@ assembler, на который я опираюсь и иметь:
                                     :ident ,ident))))))
 #+END_SRC
 
-* GNU Assembler Producer
+* GAS Producer
 
-Нужен для проверочных целей
+После парсинга входного ассемблерного кода мы получили
+список S-exps, в котором каждый S-exp соответствует одной
+строчке входного файла.
+
+Мы должны уметь преобразовать его обратно для проверочных
+целей.
+
+Так как каждый из этих S-exps является вызовом функции, для
+обратного преобразования нам нужно предоставить набор или
+несколько наборов соответствующий функций.
+
+Разные наборы могут понадобиться для выполнения
+преобразований над кодом.
 
 #+NAME: gas_producer
 #+BEGIN_SRC elisp :var arg=p_aasm :results output
-  (defun gas-emit (in)
-      (pcase in
-        (`(:empty)  "")
-        (`(:ident ,idnt :comment-line ,cmnt)
-         (princ (format "%s%s\n" (make-string idnt ? ) cmnt)))
-        (`(:ident ,idnt :cmd :mov_reg_to_reg :from ,from :to ,to :rest ,rest)
-         (princ (format "%smov     %s, %s%s\n" (make-string idnt ? ) from to rest)))
-        (`(:ident ,idnt :cmd :mov_mem_to_reg :from ,from :to ,to :rest ,rest)
-         (princ (format "%smov     (%s), %s%s\n" (make-string idnt ? ) from to rest)))
-        (`(:ident ,idnt :cmd :mov_reg_to_mem :from ,from :to ,to :rest ,rest)
-         (princ (format "%smov     %s, (%s)%s\n" (make-string idnt ? ) from to rest)))
-        (`(:ident ,idnt :cmd :jmp_reg :to ,to :rest ,rest)
-         (princ (format "%sjmp     %s%s\n" (make-string idnt ? ) to rest)))
-        (`(:ident ,idnt :cmd :jmp_label :to ,to :rest ,rest)
-         (princ (format "%sjmp     %s%s\n" (make-string idnt ? ) to rest)))
-        (`(:ident ,idnt :cmd :label :name ,name :rest ,rest)
-         (princ (format "%s%s%s\n" (make-string idnt ? ) name rest)))
-        (_  (print in))))
+  (setq
+   example
+   '((set-const :const "_WZ_" :val "0x08" :rest nil :ident 0)
+     (empty)
+     (macro :name "NEXT" :rest "" :ident 0)
+     (mov_reg_to_reg :from "%IRP" :to "%ACR" :rest "" :ident 4)
+     (add_const_to_reg :const "$_WZ_" :to "%IRP" :rest "" :ident 4)
+     (jmp_reg_indirect :to "%ACR" :rest "" :ident 4)
+     (endm :rest "" :ident 0)
+     (empty)))
 
-  (mapcar #'gas-emit
-          (car (read-from-string arg)))
+  (defun gas-emit-empty (&rest rest)
+    (format "\n"))
+
+  (defun gas-emit-set-const (rest)
+    (format "%s.set %s, %s\n"
+            (make-string (getf rest :ident) ? )
+            (getf rest :const)
+            (getf rest :val)
+            (getf rest :rest)))
+
+  (defun gas-emit-macro (rest)
+    (format "%s.macro %s%s\n"
+            (make-string (getf rest :ident) ? )
+            (getf rest :name)
+            (getf rest :rest)))
+
+  (defun gas-emit-endm (rest)
+    (format "%s.endm%s\n"
+            (make-string (getf rest :ident) ? )
+            (getf rest :rest)))
+
+  (defun gas-emit-mov_reg_to_reg (rest)
+    (format "%smov     %s, %s%s\n"
+            (make-string (getf rest :ident) ? )
+            (getf rest :from)
+            (getf rest :to)
+            (getf rest :rest)))
+
+  (defun gas-emit-add_const_to_reg (rest)
+    (format "%sadd     %s, %s%s\n"
+            (make-string (getf rest :ident) ? )
+            (getf rest :const)
+            (getf rest :to)
+            (getf rest :rest)))
+
+  (defun gas-emit-jmp_reg_indirect (rest)
+    (format "%sjmp     &(%s)%s\n"
+            (make-string (getf rest :ident) ? )
+            (getf rest :to)
+            (getf rest :rest)))
+
+  (defun gas-emit (in)
+    (let ((func (car in))
+          (args (cdr in)))
+      (funcall (intern (concat "gas-emit-" (symbol-name func)))
+               args)))
+
+  (print (mapconcat (lambda (x) (gas-emit x)) example ""))
 #+END_SRC
 
 #+results: gas_producer
 #+begin_example
-# first COMMENT
-  # COMMENT with indentation
-    mov     %IPR, %ACR     # mov reg to reg
-    mov     %IPR, %ACR
-    mov     (%IPR), %ACR   # mov mem to reg
-    mov     (%IPR), %ACR
-    mov     %IPR, (%ACR)   # mov reg to mem
-    mov     %IPR, (%ACR)
-    jmp     %IRP           # jmp reg
-    jmp     %IRP
-    jmp     _label        # jmp label
-    jmp     _label
-_label_with_comment      # this is label
-_label
+
+".set _WZ_, 0x08
+
+.macro NEXT
+    mov     %IRP, %ACR
+    add     $_WZ_, %IRP
+    jmp     &(%ACR)
+.endm
+
+"
 #+end_example
 
 * START Opcode Producer
@@ -670,6 +716,8 @@ FF 20 ; jmp [eax] - indirect jump
 
 #+NAME: macro_next
 #+BEGIN_EXAMPLE asm
+  .set _WZ_, 0x08
+
   .macro NEXT
       mov     %IRP, %ACR
       add     $_WZ_, %IRP
@@ -684,13 +732,14 @@ FF 20 ; jmp [eax] - indirect jump
 #+END_SRC
 
 #+results:
-: - ((macro :name "NEXT" :rest "" :ident 0)
+: - ((set-const :const "_WZ_" :val "0x08" :rest nil :ident 0)
+: - (:empty)
+: - (macro :name "NEXT" :rest "" :ident 0)
 : - (mov_reg_to_reg :from "%IRP" :to "%ACR" :rest "" :ident 4)
 : - (add_const_to_reg :const "$_WZ_" :to "%IRP" :rest nil :ident 4)
 : - (jmp_reg_indirect :to "%ACR" :rest "" :ident 4)
 : - (endm :rest nil :ident 0)
 : - (:empty))
-
 
 * TODO Elf maker
 * TODO Disassembler
