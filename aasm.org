@@ -129,6 +129,7 @@ assembler, на который я опираюсь и иметь:
   <<parse_mov_reg_to_mem>>
   <<parse_add_const_to_reg>>
   <<parse_jmp_reg>>
+  <<parse_jmp_reg_indirect>>
   <<parse_jmp_label>>
   <<parse_label>>
   <<parse_macro>>
@@ -239,6 +240,20 @@ assembler, на который я опираюсь и иметь:
           (save-match-data
             (and (string-match (concat "^jmp\s*" reg "\\(.*\\)?$") param)
                  (return-from ram `(jmp_reg
+                                    :to    ,(car (split-string (match-string 1 param)))
+                                    :rest  ,(match-string 2 param)
+                                    :ident ,ident))))))
+#+END_SRC
+
+** Jump register indirect
+
+#+NAME: parse_jmp_reg_indirect
+#+BEGIN_SRC elisp
+  (setf (gethash :jmp-reg-indirect *asmp*)
+        (lambda (param)
+          (save-match-data
+            (and (string-match (concat "^jmp\s*\\*(" reg ")\\(.*\\)?$") param)
+                 (return-from ram `(jmp_reg_indirect
                                     :to    ,(car (split-string (match-string 1 param)))
                                     :rest  ,(match-string 2 param)
                                     :ident ,ident))))))
@@ -648,7 +663,7 @@ FF 20 ; jmp [eax] - indirect jump
 *** TODO je_x86_64
 * START Constant processing
 
-
+.set someconst, someval
 
 * START Macro processing
 
@@ -663,7 +678,6 @@ FF 20 ; jmp [eax] - indirect jump
   .endm
 #+END_EXAMPLE
 
-#+NAME:
 #+BEGIN_SRC elisp :var arg=macro_next :results value list pp
   (mapcar #'(lambda (in) (princ "\n") (prin1 in))
           (mapcar #'p-aasm
@@ -673,7 +687,8 @@ FF 20 ; jmp [eax] - indirect jump
 #+results:
 : - ((macro :name "NEXT" :rest "" :ident 0)
 : - (mov_reg_to_reg :from "%IRP" :to "%ACR" :rest "" :ident 4)
-: - nil nil
+: - (add_const_to_reg :const "$_WZ_" :to "%IRP" :rest nil :ident 4)
+: - (jmp_reg_indirect :to "%ACR" :rest "" :ident 4)
 : - (endm :rest nil :ident 0)
 : - (:empty))
 
