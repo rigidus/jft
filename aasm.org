@@ -689,23 +689,41 @@ FF E0 ; jmp eax - E0 is 11 100 000 in binary
                         +- 11 is direct addressing
 FF 20 ; jmp [eax] - indirect jump
 
+EB cb Jump short, RIP = RIP + 8-bit displacement sign extended to 64-bits
+
 #+NAME: jmp_reg_x86_64
 #+BEGIN_SRC elisp
 
-  (defun get-cmd-plist-x86--jmp-reg-direct (target)
-    (let ((mem (getf (get-x86-reg-bits target) :reg)))
-      (values `(:op #xFF :mod 3 :reg 4 :mem ,mem))))
+    (defun get-cmd-plist-x86--jmp-reg-direct (target)
+      (let ((mem (getf (get-x86-reg-bits target) :reg)))
+        (values `(:op #xFF :mod 3 :reg 4 :mem ,mem))))
 
-  (defun get-cmd-plist-x86--jmp-reg-indirect (target)
-    (let ((mem (getf (get-x86-reg-bits target) :reg)))
-      (values `(:op #xFF :mod 0 :reg 4 :mem ,mem))))
+    (defun get-cmd-plist-x86--jmp-reg-indirect (target)
+      (let ((mem (getf (get-x86-reg-bits target) :reg)))
+        (values `(:op #xFF :mod 0 :reg 4 :mem ,mem))))
 
-  ;; (get-cmd-plist-x86--jmp-reg-direct :%eax)
+    ;; (get-cmd-plist-x86--jmp-reg-direct :%eax)
 
-  ;; (mapcar #'(lambda (in)
-  ;;             (format "%X" in))
-  ;;         (cmd-plist-to-bytes
-  ;;          (car (get-cmd-plist-x86--jmp-reg-indirect :%eax))))
+    ;; (mapcar #'(lambda (in)
+    ;;             (format "%X" in))
+    ;;         (cmd-plist-to-bytes
+    ;;          (car (get-cmd-plist-x86--jmp-reg-indirect :%eax))))
+
+  (defun get-cmd-plist-x86--jmp-relative-short (offset)
+  (values `(:op #xEB :offset ,offset))
+  )
+
+  (get-cmd-plist-x86--jmp-relative-short #x5F)
+
+  (defun cmd-short-jmp-plist-to-bytes (in)
+  (list (getf in :op) (getf in :offset))
+  )
+
+   ;; (mapcar #'(lambda (in)
+   ;;             (format "%X" in))
+   ;;         (cmd-short-jmp-plist-to-bytes
+   ;;          (car (get-cmd-plist-x86--jmp-relative-short #x5F))))
+
 
 #+END_SRC
 
