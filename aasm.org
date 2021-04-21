@@ -728,14 +728,14 @@ jmp быть не может; а --- поле R/m, которое равно л�
     ;;          (car (get-cmd-plist-x86--jmp-reg-indirect :%eax))))
 
   (defun get-cmd-plist-x86--jmp-relative-short (offset)
-  (values `(:op #xEB :offset ,offset))
-  )
+    (values `(:op #xEB :offset ,offset))
+    )
 
   (get-cmd-plist-x86--jmp-relative-short #x5F)
 
   (defun cmd-short-jmp-plist-to-bytes (in)
-  (list (getf in :op) (getf in :offset))
-  )
+    (list (getf in :op) (getf in :offset))
+    )
 
    ;; (mapcar #'(lambda (in)
    ;;             (format "%X" in))
