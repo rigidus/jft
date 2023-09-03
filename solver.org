@@ -1,0 +1,3 @@
+# -*- mode: org; -*-
+
+* Prolog-like solver (SAT) and Planner features

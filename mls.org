@@ -1,0 +1,4 @@
+# -*- mode: org; -*-
+#+STARTUP: showall indent hidestars
+
+* Minimal Lisp System
