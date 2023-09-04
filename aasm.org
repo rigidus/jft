@@ -715,23 +715,59 @@ FF E0 ; jmp eax - E0 is 11 100 000 in binary
                         +- 11 is direct addressing
 FF 20 ; jmp [eax] - indirect jump
 
+EB cb Jump short, RIP = RIP + 8-bit displacement sign extended to 64-bits
+
+https://www.cyberforum.ru/asm-beginners/thread927866.html
+
+В случае косвенного перехода jmp в поле reg байта ModR/m
+хранится продолжение команды. Когда jmp ближний, там
+хранится 4, когда дальний - 5. Т.е. команда дальнего
+косвенного перехода выглядит так: 1111 1111 10 1---, где
+поле Mod, всегда равен 00, потому что байта Sib в команде
+jmp быть не может; а --- поле R/m, которое равно либо коду
+регистра, если в команде он фигурирует, либо 101, если после
+байта ModR/m идут байты смещения. Так вот, в случае ближнего
+перехода Интел допускает хранение адреса перехода и в
+регистре, и в памяти. В вашем примере JMP [BX] - адрес
+хранится в регистре. В случае же дальнего перехода Интел
+допускает хранение адреса только в памяти, поэтому тупое
+добавление 8 к предыдущей команде, оно же попытка
+сформировать JMP FAR [BX] - это ошибка и есть, процессор
+этого не понимает.
+
 #+NAME: jmp_reg_x86_64
 #+BEGIN_SRC elisp
 
-  (defun get-cmd-plist-x86--jmp-reg-direct (target)
-    (let ((mem (getf (get-x86-reg-bits target) :reg)))
-      (values `(:op #xFF :mod 3 :reg 4 :mem ,mem))))
+    (defun get-cmd-plist-x86--jmp-reg-direct (target)
+      (let ((mem (getf (get-x86-reg-bits target) :reg)))
+        (values `(:op #xFF :mod 3 :reg 4 :mem ,mem))))
 
-  (defun get-cmd-plist-x86--jmp-reg-indirect (target)
-    (let ((mem (getf (get-x86-reg-bits target) :reg)))
-      (values `(:op #xFF :mod 0 :reg 4 :mem ,mem))))
+    (defun get-cmd-plist-x86--jmp-reg-indirect (target)
+      (let ((mem (getf (get-x86-reg-bits target) :reg)))
+        (values `(:op #xFF :mod 0 :reg 4 :mem ,mem))))
 
-  ;; (get-cmd-plist-x86--jmp-reg-direct :%eax)
+    ;; (get-cmd-plist-x86--jmp-reg-direct :%eax)
 
-  ;; (mapcar #'(lambda (in)
-  ;;             (format "%X" in))
-  ;;         (cmd-plist-to-bytes
-  ;;          (car (get-cmd-plist-x86--jmp-reg-indirect :%eax))))
+    ;; (mapcar #'(lambda (in)
+    ;;             (format "%X" in))
+    ;;         (cmd-plist-to-bytes
+    ;;          (car (get-cmd-plist-x86--jmp-reg-indirect :%eax))))
+
+  (defun get-cmd-plist-x86--jmp-relative-short (offset)
+    (values `(:op #xEB :offset ,offset))
+    )
+
+  (get-cmd-plist-x86--jmp-relative-short #x5F)
+
+  (defun cmd-short-jmp-plist-to-bytes (in)
+    (list (getf in :op) (getf in :offset))
+    )
+
+   ;; (mapcar #'(lambda (in)
+   ;;             (format "%X" in))
+   ;;         (cmd-short-jmp-plist-to-bytes
+   ;;          (car (get-cmd-plist-x86--jmp-relative-short #x5F))))
+
 
 #+END_SRC
 
