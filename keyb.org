@@ -1,0 +1,18 @@
+# -*- mode: org; -*-
+#+STARTUP: showall indent hidestars
+
+#+TITLE: Smart Keyboard
+
+* Requirements
+
+Двухпроцессорная система с памятью и экраном
+
+Потом можно попробовать добавить камеру, которая смотрит на экран, для автоматических задач.
+
+Еще одна интересная идея - вставить туда LLM : https://habr.com/ru/articles/757224/
+
+* Refs
+
+Одна атмега шьет другую - https://www.youtube.com/watch?v=XapvHj64B8U
+https://www.youtube.com/@udamonic2176
+https://udamonic.com/getting-started.html
