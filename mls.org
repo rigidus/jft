@@ -1,4 +1,714 @@
 # -*- mode: org; -*-
 #+STARTUP: showall indent hidestars
 
-* Minimal Lisp System
+#+TITLE: Minimal Lisp System
+
+* Cons cells
+
+Для представления списковых структур данных лиспа нам нужны cons-ячейки. Эта структура будет содержать два указателя: на голову (car) и хвост (cdr) S-выражения. В Forth, это может быть реализовано с помощью структуры, состоящей из двух ячеек, которые могут указывать на другие структуры или данные. Нам также нужны функции доступа к обоим половинам ячейки
+
+#+NAME: cons_cells
+#+BEGIN_SRC forth
+  \ Структура данных для cons-ячейки
+  create cons-cell 2 cells allot
+
+  \ Создание cons-ячейки
+  : make-cons ( car cdr -- cons )
+    cons-cell dup !        \ Сохраняем car
+    cons-cell 2 cells + !  \ Сохраняем cdr
+    ;
+
+  \ Получение car из cons-ячейки
+  : car ( cons -- car )
+    dup @  \ Получаем указатель на car
+    @      \ Получаем значение car
+    ;
+
+  \ Получение cdr из cons-ячейки
+  : cdr ( cons -- cdr )
+    cons-cell 2 cells + @  \ Получаем указатель на cdr
+    @                      \ Получаем значение cdr
+    ;
+
+  \ Пример использования
+  : main
+    42                  \ Атомарное значение
+    'symbol             \ Атомарное значение
+    make-cons           \ Создаем cons-ячейку
+      1                \ car
+      make-cons        \ cdr - вложенная cons-ячейка
+        2              \ car
+        3              \ cdr
+    ;
+#+END_SRC
+
+* List functions
+
+Для работы с cons-ячейками и списками S-выражений понадобятся функции, которые позволят выполнять следующие операции:
+
+- Проверка на nil: Функция для проверки, является ли cons-ячейка или список пустым (nil).
+- Добавление элемента в список: Функция для добавления новой cons-ячейки в начало списка.
+- Извлечение элемента из списка: Функция для извлечения первой cons-ячейки из списка (car) и получения оставшегося списка (cdr).
+- Получение длины списка: Функция для определения длины списка.
+- Поиск элемента в списке: Функция для поиска конкретного элемента в списке.
+- Объединение списков: Функция для объединения двух списков.
+- Изменение элемента в списке: Функция для замены значения внутри cons-ячейки.
+- Удаление элемента из списка: Функция для удаления элемента из списка.
+
+#+NAME: list_fns
+#+BEGIN_SRC forth
+  \ Проверка на nil (пустой список)
+  : nil? ( cons -- flag )
+    0= ;
+
+  \ Добавление элемента в начало списка
+  : push ( element list -- new-list )
+    swap make-cons ;
+
+  \ Извлечение первого элемента из списка (car) и оставшегося списка (cdr)
+  : pop ( list -- car cdr )
+    cdr ;
+
+  \ Получение длины списка
+  : length ( list -- n )
+    0 swap
+    begin
+      dup nil? if drop exit then
+      1+ swap pop
+    again ;
+
+  \ Поиск элемента в списке
+  : find ( element list -- flag )
+    begin
+      dup nil? if drop false exit then
+      swap car =
+      if
+        true exit
+      else
+        pop
+      then
+    again ;
+
+  \ Объединение двух списков
+  : append ( list1 list2 -- new-list )
+    begin
+      dup nil? if drop exit then
+      swap car swap cdr
+      swap push
+    again ;
+
+  \ Изменение элемента в списке
+  : set ( new-value cons -- )
+    swap ! ;
+
+  \ Удаление элемента из списка
+  : remove ( element list -- new-list )
+    \ Создаем новый пустой список
+    nil
+    \ Для каждого элемента в старом списке
+    begin
+      dup nil? if drop exit then
+      \ Извлекаем первый элемент (car) и оставшийся список (cdr)
+      swap pop swap
+      \ Если элемент не равен удаляемому элементу, добавляем его в новый список
+      over <> if
+        swap push
+      else
+        drop
+      then
+    again ;
+
+  \ Пример использования
+  : main
+    nil                   \ Создаем пустой список
+    42 push               \ Добавляем 42 в список
+    123 push              \ Добавляем 123 в список
+    dup length . cr       \ Выводим длину списка (2)
+    42 find if            \ Ищем 42 в списке
+      ." 42 найдено" cr
+    else
+      ." 42 не найдено" cr
+    then
+    99 set                \ Заменяем 42 на 99
+    42 remove             \ Удаляем 42 из списка
+    dup length . cr       \ Выводим длину списка (1)
+  ;
+#+END_SRC
+
+* Parsing s-expr
+
+Теперь я бы хотел иметь парсер, который принимает на вход строку и возвращает соответствующий список (если строка является правильным s-выражением) или nil в противном случае
+
+#+NAME: parser
+#+BEGIN_SRC forth
+  \ Определение константы для максимальной длины входной строки
+  128 constant MAX-INPUT-LENGTH
+
+  \ Создание буфера для входной строки
+  create INPUT-BUFFER MAX-INPUT-LENGTH allot
+
+  \ Указатель на текущую позицию во входной строке
+  0 variable INPUT-POINTER
+
+  \ Структура данных для cons-ячейки
+  create cons-cell 2 cells allot
+
+  \ Создание списка (nil)
+  : nil ( -- cons )
+    0 0 make-cons ;
+
+  \ Создание cons-ячейки
+  : make-cons ( car cdr -- cons )
+    cons-cell dup !        \ Сохраняем car
+    cons-cell 2 cells + !  \ Сохраняем cdr
+    ;
+
+  \ Получение car из cons-ячейки
+  : car ( cons -- car )
+    dup @  \ Получаем указатель на car
+    @      \ Получаем значение car
+    ;
+
+  \ Получение cdr из cons-ячейки
+  : cdr ( cons -- cdr )
+    cons-cell 2 cells + @  \ Получаем указатель на cdr
+    @                      \ Получаем значение cdr
+    ;
+
+  \ Определение примитива для чтения символа из входной строки
+  : read-char ( -- char )
+    INPUT-BUFFER INPUT-POINTER @ + c@ swap 1 + INPUT-POINTER !
+  ;
+
+  \ Пропустить пробелы и переводы строк
+  : skip-whitespace ( -- )
+    begin
+      read-char dup 0= until
+      dup 32 = swap 10 = or
+    until drop
+  ;
+
+  \ Парсинг чисел
+  : parse-number ( -- n flag )
+    skip-whitespace
+    read-char dup 0> if
+      0 swap
+      begin
+        dup '0 - swap 10 * + read-char dup 0> not
+      until
+      drop true
+    else
+      drop false
+    then
+  ;
+
+  \ Парсинг символов
+  : parse-symbol ( -- symbol flag )
+    skip-whitespace
+    32 allocate throw  \ Выделить буфер для символа
+    swap 0 do
+      read-char swap i + c!
+    loop
+    drop true
+  ;
+
+  \ Парсинг S-выражений
+  : parse-s-exp ( -- cons flag )
+    skip-whitespace
+    read-char case
+      "(" of
+        nil                \ Начало нового списка
+        begin
+          parse-s-exp 0= until
+          dup if            \ Если не nil, то это car новой cons-ячейки
+            over make-cons  \ Создаем новую cons-ячейку
+            swap car set    \ Устанавливаем car в новую cons-ячейку
+            swap cdr set    \ Устанавливаем cdr в новую cons-ячейку
+          then
+        endof
+      ")" of
+        nil false           \ Конец списка
+        skip-whitespace
+      endof
+      default
+        parse-number if    \ Если успешно спарсили число
+          make-cons       \ Создаем новую cons-ячейку
+          swap car set    \ Устанавливаем car в новую cons-ячейку
+          nil             \ cdr - nil, так как это атомарное значение
+          true            \ Флаг успешного парсинга
+        else
+          parse-symbol if \ Если успешно спарсили символ
+            make-cons     \ Создаем новую cons-ячейку
+            swap car set  \ Устанавливаем car в новую cons-ячейку
+            nil           \ cdr - nil, так как это атомарное значение
+            true          \ Флаг успешного парсинга
+          else
+            drop false   \ В случае ошибки возвращаем false
+          then
+        then
+      endcase
+  ;
+
+  \ Пример использования парсера
+  : main
+    ." Введите S-выражение: " cr
+    INPUT-BUFFER MAX-INPUT-LENGTH accept
+    INPUT-BUFFER parse-s-exp if
+      ." Правильное S-выражение." cr
+    else
+      ." Неправильное S-выражение." cr
+    then
+  ;
+#+END_SRC
+
+Этот код парсит введенную строку и строит соответствующее S-выражение в виде списка cons-ячеек. Если строка правильная S-выражение, то парсер вернет true и соответствующее S-выражение в виде списка. В противном случае, он вернет false.
+
+Пример ввода и вывода:
+
+#+BEGIN_SRC forth
+Введите S-выражение: (1 2 (+ 3 4))
+Правильное S-выражение.
+
+Введите S-выражение: (1 2 (+ 3 4)
+Неправильное S-выражение.
+#+END_SRC
+
+В будущем его надо расширить, чтобы он показывал где ошибка и ее тип (незакрытая скобка например)
+
+* Symbols
+
+Реализация символов в интерпретаторе Lisp на языке Forth может быть сделана через хранилище символов и механизм для создания, поиска и установки значений символов.
+
+#+NAME: symbols
+#+BEGIN_SRC forth
+  \ Создаем хранилище символов (ассоциативный массив)
+  create symbol-dictionary 128 cells allot
+
+  \ Создаем указатель на текущее свободное место в хранилище символов
+  0 variable symbol-pointer
+
+  \ Определение структуры для символа
+  create symbol-struct 1 cells allot
+
+  \ Создание нового символа и добавление его в хранилище
+  : intern ( name -- symbol )
+    dup find-symbol if
+      drop
+    else
+      symbol-pointer @ symbol-struct swap move
+      symbol-dictionary symbol-pointer @ cells + !
+      symbol-pointer 1+!
+    then
+  ;
+
+  \ Поиск символа в хранилище
+  : find-symbol ( name -- symbol or 0 )
+    0 symbol-pointer @
+    begin
+      dup while
+      symbol-dictionary swap cells + @
+      over symbol-struct compare 0=
+      if
+        drop
+        exit
+      then
+      1-
+    repeat
+    drop 0
+  ;
+
+  \ Установка значения символа
+  : set-symbol-value ( symbol value -- )
+    swap symbol-struct swap move
+  ;
+
+  \ Получение значения символа
+  : get-symbol-value ( symbol -- value )
+    symbol-struct swap move
+  ;
+
+  \ Пример использования символов
+  : main
+    "x" intern   \ Создаем символ "x" и добавляем его в хранилище
+    42            \ Значение для "x"
+    set-symbol-value
+    "x" intern   \ Получаем символ "x" из хранилища (существующий)
+    get-symbol-value . cr  \ Выводим значение символа "x"
+  ;
+#+END_SRC
+
+* Environments
+
+Для реализации окружений Lisp потребуется структура данных, которая будет хранить символы и их соответствующие значения в контексте. Обычно для этой цели используется стек, где каждый уровень стека представляет собой отдельное окружение. Вот пример реализации окружений:
+
+#+NAME: env
+#+BEGIN_SRC forth
+  \ Создаем стек для окружений
+  create environment-stack 128 cells allot
+
+  \ Указатель на текущее окружение в стеке
+  0 variable current-environment
+
+  \ Поле для хранения символов и их значений в окружении
+  create environment 128 cells allot
+
+  \ Указатель на текущее свободное место в окружении
+  0 variable environment-pointer
+
+  \ Поле для хранения родительского окружения
+  create parent-environment 1 cells allot
+
+  \ Установка текущего окружения (помещение в стек)
+  : push-environment ( -- )
+    current-environment @ environment-stack cells + !
+    current-environment @ environment-pointer @ environment swap move
+    environment-pointer @ current-environment !
+    environment-pointer cell+ parent-environment swap move
+    0 parent-environment !
+    environment-pointer cell+ environment-pointer !
+  ;
+
+  \ Возврат к предыдущему окружению (извлечение из стека)
+  : pop-environment ( -- )
+    environment-stack cells + current-environment !
+    current-environment @ environment-pointer @ environment swap move
+    environment-pointer cell- environment-pointer !
+    parent-environment cell- parent-environment !
+  ;
+
+  \ Создание нового окружения (фрейма)
+  : create-environment ( -- )
+    environment-pointer cell+ environment-pointer !
+    environment-pointer @ parent-environment cell+ move
+    0 parent-environment !
+  ;
+
+  \ Поиск символа в текущем окружении и его родительских окружениях
+  : find-symbol-in-environment ( name -- symbol or 0 )
+    current-environment @ environment-pointer @
+    begin
+      dup while
+      environment swap cells + @
+      dup if
+        over symbol-struct compare 0=
+        if
+          drop
+          exit
+        then
+      then
+      1-
+    repeat
+    drop 0
+  ;
+
+  \ Создание символа в текущем окружении
+  : intern-in-environment ( name -- symbol )
+    find-symbol-in-environment if
+      drop
+    else
+      symbol-struct swap move
+      environment-pointer @ environment swap move
+      environment-pointer cell+ environment-pointer !
+      environment-pointer @ cells + !
+    then
+  ;
+
+  \ Установка значения символа в текущем окружении
+  : set-symbol-value-in-environment ( symbol value -- )
+    environment-pointer @ environment swap move
+    swap symbol-struct swap move
+  ;
+
+  \ Получение значения символа в текущем окружении
+  : get-symbol-value-in-environment ( symbol -- value or 0 )
+    symbol-struct swap move
+    environment-pointer @ environment swap move
+    find-symbol-in-environment
+    if
+      drop
+      symbol-struct swap move
+      environment-pointer cell+ environment-pointer !
+      environment-pointer @ cells + !
+      parent-environment cell+ parent-environment !
+    else
+      drop 0
+    then
+  ;
+
+  \ Пример использования окружений
+  : main
+    \ Создаем новое окружение (фрейм)
+    create-environment
+    \ Помещаем его в стек
+    push-environment
+
+    \ Создаем символы и присваиваем им значения в текущем окружении
+    "x" intern-in-environment 42 set-symbol-value-in-environment
+    "y" intern-in-environment 99 set-symbol-value-in-environment
+
+    \ Выводим значения символов
+    "x" intern-in-environment get-symbol-value-in-environment . cr
+    "y" intern-in-environment get-symbol-value-in-environment . cr
+
+    \ Переходим к родительскому окружению (извлечение из стека)
+    pop-environment
+
+    \ Попытка получить значения символов в родительском окружении
+    "x" intern-in-environment get-symbol-value-in-environment . cr
+    "y" intern-in-environment get-symbol-value-in-environment . cr
+  ;
+#+END_SRC
+
+В этом коде мы создаем стек для окружений и используем его для хранения различных окружений, представляющих собой фреймы с символами и их значениями. Можно создавать новые окружения (фреймы) с помощью create-environment, добавлять их в стек с помощью push-environment, и извлекать из стека с помощью pop-environment. Каждое окружение хранит символы и их значения в виде cons-ячеек, как это было реализовано ранее.
+
+* Lambdas
+
+Для реализации функций потребуется структура данных, которая будет хранить код функций и их аргументы. Обычно для этой цели используется структура данных, представляющая функцию как cons-ячейку, где car хранит список аргументов, а cdr - код функции.
+
+#+NAME: lambdas
+#+BEGIN_SRC forth
+  \ Создаем хранилище для функций
+  create function-dictionary 128 cells allot
+
+  \ Указатель на текущую функцию
+  0 variable current-function
+
+  \ Поле для хранения аргументов и кода функции
+  create function-struct 2 cells allot
+
+  \ Создание новой функции и добавление ее в хранилище
+  : defun ( name args code -- )
+    function-struct swap move
+    current-function @ function-dictionary cells + !
+    current-function 1+!
+  ;
+
+  \ Определение символа (имени) для функции
+  : defun-symbol ( name -- )
+    create
+    does> @ execute
+  ;
+
+  \ Задание аргументов функции
+  : args ( args -- )
+    current-function @ function-struct swap move
+  ;
+
+  \ Задание кода функции
+  : code ( code -- )
+    current-function @ 1 cells + function-struct swap move
+  ;
+
+  \ Вызов функции
+  : call ( -- result )
+    \ Получаем текущую функцию
+    current-function @ function-struct swap move
+
+    \ Создаем новое окружение (фрейм)
+    create-environment
+    push-environment
+
+    \ Устанавливаем аргументы в текущем окружении
+    args
+
+    \ Выполняем код функции
+    code evaluate
+
+    \ Получаем результат
+    get-value
+
+    \ Возвращаемся к предыдущему окружению (извлечение из стека)
+    pop-environment
+
+    \ Возвращаем результат
+    swap drop
+  ;
+
+  \ Пример использования создания и вызова функций
+  : main
+    \ Создаем новую функцию
+    "add" defun-symbol
+    ( x y -- x+y )
+    args
+      get-value \ Получаем значение первого аргумента (x)
+      get-value \ Получаем значение второго аргумента (y)
+      +          \ Складываем их
+    code
+      call      \ Вызываем функцию
+    defun
+
+    \ Вызываем созданную функцию
+    3 4 add .
+  ;
+#+END_SRC
+
+* Macro
+
+Макросы обычно позволяют расширять код на уровне синтаксиса, что отличается от функций, которые работают с данными на уровне значений.
+
+#+NAME: macroses
+#+BEGIN_SRC forth
+  \ Создаем хранилище для макросов
+  create macro-dictionary 128 cells allot
+
+  \ Указатель на текущий макрос
+  0 variable current-macro
+
+  \ Поле для хранения кода макроса
+  create macro-struct 1 cells allot
+
+  \ Создание нового макроса и добавление его в хранилище
+  : defmacro ( name code -- )
+    macro-struct swap move
+    current-macro @ macro-dictionary cells + !
+    current-macro 1+!
+  ;
+
+  \ Определение символа (имени) для макроса
+  : defmacro-symbol ( name -- )
+    create
+    does> @ execute
+  ;
+
+  \ Задание кода макроса
+  : macro-code ( code -- )
+    current-macro @ macro-struct swap move
+  ;
+
+  \ Вызов макроса
+  : expand-macro ( -- )
+    \ Получаем текущий макрос
+    current-macro @ macro-struct swap move
+
+    \ Создаем новое окружение (фрейм)
+    create-environment
+    push-environment
+
+    \ Выполняем код макроса
+    macro-code evaluate
+
+    \ Получаем результат
+    get-value
+
+    \ Возвращаемся к предыдущему окружению (извлечение из стека)
+    pop-environment
+
+    \ Вставляем результат макроса в текущее окружение
+    set-value
+  ;
+
+  \ Пример использования макросов
+  : main
+    \ Создаем новый макрос
+    "double" defmacro-symbol
+    ( x -- x x * ) \ Макрос умножает аргумент на самого себя
+    macro-code
+      expand-macro \ Расширяем макрос
+    defmacro
+
+    \ Используем созданный макрос
+    7 double .
+  ;
+#+END_SRC
+
+* REPL
+
+Для создания REPL (Read-Eval-Print Loop) потребуется включить весь предыдущий код в структуру, которая будет читать ввод пользователя, выполнять его как Lisp-код, а затем выводить результат.
+
+#+NAME: repl
+#+BEGIN_SRC forth
+  \ Создаем хранилище символов
+  create symbol-dictionary 128 cells allot
+
+  \ Указатель на текущее символьное окружение
+  0 variable current-environment
+
+  \ Создаем хранилище для макросов
+  create macro-dictionary 128 cells allot
+
+  \ Указатель на текущий макрос
+  0 variable current-macro
+
+  \ Создаем стек для окружений
+  create environment-stack 128 cells allot
+
+  \ Указатель на текущее окружение в стеке
+  0 variable current-environment
+
+  \ Создание структуры для cons-ячейки
+  create cons-cell 2 cells allot
+
+  \ Создание хранилища для функций
+  create function-dictionary 128 cells allot
+
+  \ Указатель на текущую функцию
+  0 variable current-function
+
+  \ Создание структуры для функций
+  create function-struct 2 cells allot
+
+  \ Создание хранилища для макросов
+  create macro-dictionary 128 cells allot
+
+  \ Указатель на текущий макрос
+  0 variable current-macro
+
+  \ Создание структуры для макросов
+  create macro-struct 1 cells allot
+
+  \ Поле для хранения аргументов функции
+  create function-args 128 cells allot
+
+  \ Создание буфера для входной строки
+  create INPUT-BUFFER 128 allot
+
+  \ Указатель на текущую позицию во входной строке
+  0 variable INPUT-POINTER
+
+  \ Поле для хранения кода макроса
+  create macro-code 128 allot
+
+  \ Создание буфера для вывода результата
+  create OUTPUT-BUFFER 128 allot
+
+  \ Указатель на текущую позицию в выводе
+  0 variable OUTPUT-POINTER
+
+  \ Вспомогательные слова для чтения и вывода
+  : read-char ( -- char )
+    INPUT-BUFFER INPUT-POINTER @ + c@ swap 1 + INPUT-POINTER !
+  ;
+
+  : write-char ( char -- )
+    OUTPUT-BUFFER OUTPUT-POINTER @ + c! 1 + OUTPUT-POINTER !
+  ;
+
+  \ Основные операции для работы с символами, окружениями, функциями и макросами
+
+  ...
+
+  \ Основной цикл REPL
+  : repl ( -- )
+    begin
+      ." Lisp> " cr
+      INPUT-BUFFER 128 accept drop
+
+      \ Обрабатываем ввод пользователя
+
+      \ Расширяем макросы
+      expand-macros
+
+      \ Выполняем код
+
+      \ Выводим результат
+      OUTPUT-BUFFER OUTPUT-POINTER @ type
+      OUTPUT-BUFFER 128 erase OUTPUT-POINTER 0 OUTPUT-POINTER !
+    again
+  ;
+
+  repl
+#+END_SRC
+
+* TODO Packages
+
+Нужно добавить пакеты и пакетную механику с затенением (shadow) символов, интернированием и экспортом символов из пакета
